@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DCU_diag v2 — HYGON DCU 综合诊断工具</title>
+<link rel="stylesheet" href="styles.css"></head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<header>
+  <div class="logo-badge">SUGON</div>
+  <h1>DCU<span>_diag</span> &nbsp;v2&nbsp; · &nbsp;综合诊断平台</h1>
+  <div class="hdr-spacer"></div>
+  <span class="hdr-ver">Rev.2.2.0</span>
+  <button class="btn btn-sm" onclick="openExport()">导出报告</button>
+</header>
+
+<!-- ══ MODULE TABS ══ -->
+<div class="module-tabs">
+  <div class="mod-tab active" style="--tab-color:var(--xid-col)" data-mod="xid" onclick="switchMod('xid')">
+    <div class="tab-dot"></div> XID / SXID 错误
+    <span class="tab-count" id="tc-xid">0</span>
+  </div>
+  <div class="mod-tab" style="--tab-color:var(--drv-col)" data-mod="drv" onclick="switchMod('drv')">
+    <div class="tab-dot"></div> 驱动日志分析
+    <span class="tab-count" id="tc-drv">0</span>
+  </div>
+  <div class="mod-tab" style="--tab-color:var(--hw-col)" data-mod="hw" onclick="switchMod('hw')">
+    <div class="tab-dot"></div> 硬件日志分析
+    <span class="tab-count" id="tc-hw">0</span>
+  </div>
+</div>
+
+<!-- ══ MODULES WRAP ══ -->
+<div class="modules-wrap">
+
+<!-- ─────────────────── XID MODULE ─────────────────── -->
+<div class="module-panel active" id="mod-xid">
+  <div class="panel-left">
+    <div class="panel-title" style="--tab-color:var(--xid-col)"><span>▣</span>XID / SXID 日志输入</div>
+    <div class="log-input-wrap">
+      <div class="import-zone" id="xid-zone" style="--zone-color:var(--xid-col)"
+           ondragover="dragOver(event,'xid-zone')" ondragleave="dragLeave('xid-zone')" ondrop="drop(event,'xid-zone','xid-file','xid-fname','xid-ta',parseXID)">
+        <input type="file" id="xid-file" accept=".log,.txt,.dmesg,text/plain" onchange="fileSelect(event,'xid-fname','xid-ta',parseXID)">
+        <div class="import-icon">📂</div>
+        <div class="import-text"><b>点击选择 / 拖拽日志文件</b><span>.log .txt .dmesg 均支持</span></div>
+        <div class="import-fname" id="xid-fname">未选择</div>
+      </div>
+      <div class="import-sep">或手动粘贴</div>
+      <textarea class="log-ta" id="xid-ta" placeholder="粘贴 dmesg -T 输出…&#10;[Thu Jan  2 10:05:21 2025] hycu 0000:49:00.0: hycu:(serial:ABC)XID:81, pasid:0…"></textarea>
+      <div class="input-hint">支持 <b>dmesg -T</b> 格式，自动提取 <b>XID / SXID</b> 并按时间排序</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" style="flex:1" onclick="parseXID()">▶ 解析</button>
+        <button class="btn" onclick="loadXIDDemo()">示例</button>
+        <button class="btn" onclick="clearMod('xid')">清空</button>
+      </div>
+    </div>
+    <div class="stats-bar" id="xid-stats">
+      <div class="stat-item"><span class="stat-val" id="xs-total" style="color:var(--info)">0</span><span class="stat-lbl">总计</span></div>
+      <div class="stat-item"><span class="stat-val" id="xs-crit"  style="color:var(--c-crit)">0</span><span class="stat-lbl">严重</span></div>
+      <div class="stat-item"><span class="stat-val" id="xs-warn"  style="color:var(--c-rasue)">0</span><span class="stat-lbl">警告</span></div>
+      <div class="stat-item"><span class="stat-val" id="xs-ok"    style="color:var(--c-rasce)">0</span><span class="stat-lbl">可恢复</span></div>
+    </div>
+    <div class="event-list" id="xid-list"><div class="es"><div class="es-icon">📋</div><p>等待日志输入</p></div></div>
+  </div>
+  <div class="panel-right">
+    <div class="detail-pane" id="xid-detail-pane">
+      <div class="detail-placeholder"><div class="ph-icon">🔍</div><p>点击左侧条目查看详情</p></div>
+      <div class="detail-card" id="xid-detail-card"></div>
+    </div>
+    <div class="log-pane">
+      <div class="log-toolbar">
+        <span style="font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">原始日志</span>
+        <input class="log-filter" id="xid-filter" placeholder="过滤…" oninput="filterLog('xid-lines','xid-filter')">
+        <span id="xid-linecnt" style="font-size:10px;color:var(--muted)">0 行</span>
+      </div>
+      <div class="log-lines-wrap" id="xid-lines"><div class="es"><div class="es-icon">📄</div><p>解析后显示原始日志</p></div></div>
+      <div class="history-pane" id="xid-history-pane"><div class="es"><div class="es-icon">🕘</div><p>未加载历史记录。切换标签页或解析后自动拉取。</p></div></div>
+    </div>
+  </div>
+</div><!-- /mod-xid -->
+
+<!-- ─────────────────── DRIVER MODULE ─────────────────── -->
+<div class="module-panel" id="mod-drv">
+  <div class="panel-left">
+    <div class="panel-title" style="--tab-color:var(--drv-col)"><span>▣</span>驱动日志输入</div>
+    <div class="log-input-wrap">
+      <div class="import-zone" id="drv-zone" style="--zone-color:var(--drv-col)"
+           ondragover="dragOver(event,'drv-zone')" ondragleave="dragLeave('drv-zone')" ondrop="drop(event,'drv-zone','drv-file','drv-fname','drv-ta',parseDRV)">
+        <input type="file" id="drv-file" accept=".log,.txt,text/plain" onchange="fileSelect(event,'drv-fname','drv-ta',parseDRV)">
+        <div class="import-icon">📂</div>
+        <div class="import-text"><b>点击选择 / 拖拽驱动日志</b><span>drvdiag 输出 / kern.log / messages</span></div>
+        <div class="import-fname" id="drv-fname">未选择</div>
+      </div>
+      <div class="import-sep">或手动粘贴</div>
+      <textarea class="log-ta" id="drv-ta" placeholder="粘贴驱动日志…&#10;支持 drvdiag、/var/log/messages、kern.log 等&#10;&#10;示例：&#10;[ERROR] hycu: failed to load firmware amdgpu/gc_11_0_0_pfp.bin&#10;[WARN]  hycu: ring gfx timeout, hard resetting…"></textarea>
+      <div class="input-hint">支持 <b>drvdiag</b>、<b>kern.log</b>、<b>messages</b> 等驱动相关日志格式</div>
+      <div class="btn-row">
+        <button class="btn btn-drv" style="flex:1" onclick="parseDRV()">▶ 解析</button>
+        <button class="btn" onclick="loadDRVDemo()">示例</button>
+        <button class="btn" onclick="clearMod('drv')">清空</button>
+      </div>
+    </div>
+    <div class="stats-bar">
+      <div class="stat-item"><span class="stat-val" id="ds-total" style="color:var(--info)">0</span><span class="stat-lbl">总计</span></div>
+      <div class="stat-item"><span class="stat-val" id="ds-err"   style="color:var(--c-crit)">0</span><span class="stat-lbl">ERROR</span></div>
+      <div class="stat-item"><span class="stat-val" id="ds-warn"  style="color:var(--c-rasue)">0</span><span class="stat-lbl">WARN</span></div>
+      <div class="stat-item"><span class="stat-val" id="ds-info"  style="color:var(--c-init)">0</span><span class="stat-lbl">INFO</span></div>
+    </div>
+    <div class="event-list" id="drv-list"><div class="es"><div class="es-icon">🔧</div><p>等待驱动日志输入</p></div></div>
+  </div>
+  <div class="panel-right">
+    <div class="detail-pane" id="drv-detail-pane">
+      <div class="detail-placeholder"><div class="ph-icon">🔍</div><p>点击左侧条目查看详情</p></div>
+      <div class="detail-card" id="drv-detail-card"></div>
+    </div>
+    <div class="log-pane">
+      <div class="log-toolbar">
+        <span style="font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">原始日志</span>
+        <input class="log-filter" id="drv-filter" placeholder="过滤…" oninput="filterLog('drv-lines','drv-filter')">
+        <span id="drv-linecnt" style="font-size:10px;color:var(--muted)">0 行</span>
+      </div>
+      <div class="log-lines-wrap" id="drv-lines"><div class="es"><div class="es-icon">📄</div><p>解析后显示原始日志</p></div></div>
+      <div class="history-pane" id="drv-history-pane"><div class="es"><div class="es-icon">🕘</div><p>未加载历史记录。切换标签页或解析后自动拉取。</p></div></div>
+    </div>
+  </div>
+</div><!-- /mod-drv -->
+
+<!-- ─────────────────── HARDWARE MODULE ─────────────────── -->
+<div class="module-panel" id="mod-hw">
+  <div class="panel-left">
+    <div class="panel-title" style="--tab-color:var(--hw-col)"><span>▣</span>硬件日志输入</div>
+    <div class="log-input-wrap">
+      <div class="import-zone" id="hw-zone" style="--zone-color:var(--hw-col)"
+           ondragover="dragOver(event,'hw-zone')" ondragleave="dragLeave('hw-zone')" ondrop="drop(event,'hw-zone','hw-file','hw-fname','hw-ta',parseHW)">
+        <input type="file" id="hw-file" accept=".log,.txt,text/plain" onchange="fileSelect(event,'hw-fname','hw-ta',parseHW)">
+        <div class="import-icon">📂</div>
+        <div class="import-text"><b>点击选择 / 拖拽硬件日志</b><span>HyFieldDiag / hy-smi / IPMI / BMC 日志</span></div>
+        <div class="import-fname" id="hw-fname">未选择</div>
+      </div>
+      <div class="import-sep">或手动粘贴</div>
+      <textarea class="log-ta" id="hw-ta" placeholder="粘贴硬件诊断日志…&#10;支持 HyFieldDiag、hy-smi、IPMI sel list、BMC 事件日志&#10;&#10;示例：&#10;[HyFieldDiag] FAIL: UMC ECC uncorrectable error detected on HBM channel 2&#10;[hy-smi] Temperature: 101°C  Threshold: 95°C  Status: CRITICAL"></textarea>
+      <div class="input-hint">支持 <b>HyFieldDiag</b>、<b>hy-smi</b>、<b>IPMI</b>、<b>BMC</b> 等硬件诊断工具输出</div>
+      <div class="btn-row">
+        <button class="btn btn-hw" style="flex:1" onclick="parseHW()">▶ 解析</button>
+        <button class="btn" onclick="loadHWDemo()">示例</button>
+        <button class="btn" onclick="clearMod('hw')">清空</button>
+      </div>
+    </div>
+    <div class="stats-bar">
+      <div class="stat-item"><span class="stat-val" id="hs-total" style="color:var(--info)">0</span><span class="stat-lbl">总计</span></div>
+      <div class="stat-item"><span class="stat-val" id="hs-fail"  style="color:var(--c-crit)">0</span><span class="stat-lbl">FAIL</span></div>
+      <div class="stat-item"><span class="stat-val" id="hs-warn"  style="color:var(--c-rasue)">0</span><span class="stat-lbl">WARN</span></div>
+      <div class="stat-item"><span class="stat-val" id="hs-pass"  style="color:var(--c-rasce)">0</span><span class="stat-lbl">PASS</span></div>
+    </div>
+    <div class="event-list" id="hw-list"><div class="es"><div class="es-icon">🖥️</div><p>等待硬件日志输入</p></div></div>
+  </div>
+  <div class="panel-right">
+    <div class="detail-pane" id="hw-detail-pane">
+      <div class="detail-placeholder"><div class="ph-icon">🔍</div><p>点击左侧条目查看详情</p></div>
+      <div class="detail-card" id="hw-detail-card"></div>
+    </div>
+    <div class="log-pane">
+      <div class="log-toolbar">
+        <span style="font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">原始日志</span>
+        <input class="log-filter" id="hw-filter" placeholder="过滤…" oninput="filterLog('hw-lines','hw-filter')">
+        <span id="hw-linecnt" style="font-size:10px;color:var(--muted)">0 行</span>
+      </div>
+      <div class="log-lines-wrap" id="hw-lines"><div class="es"><div class="es-icon">📄</div><p>解析后显示原始日志</p></div></div>
+      <div class="history-pane" id="hw-history-pane"><div class="es"><div class="es-icon">🕘</div><p>未加载历史记录。切换标签页或解析后自动拉取。</p></div></div>
+    </div>
+  </div>
+</div><!-- /mod-hw -->
+
+</div><!-- /modules-wrap -->
+
+<!-- ══ EXPORT MODAL ══ -->
+<div class="modal-ov" id="exportModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3>导出综合诊断报告</h3>
+      <button class="btn btn-sm" onclick="closeExport()">✕ 关闭</button>
+      <button class="btn btn-ok btn-sm" onclick="downloadReport()">⬇ 下载报告</button>
+    </div>
+    <div class="modal-body"><pre id="exportPre"></pre></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

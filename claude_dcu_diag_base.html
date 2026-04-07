@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DCU_diag v2 — HYGON DCU 综合诊断工具</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap');
+
+:root {
+  --bg:       #0a0c10;
+  --surface:  #111318;
+  --border:   #1e2330;
+  --border2:  #2a3045;
+  --text:     #c8cdd8;
+  --muted:    #5a6070;
+  --accent:   #e05a2b;
+  --accent2:  #f5a623;
+  --ok:       #2dce6a;
+  --info:     #4a9eff;
+  --purple:   #9b59b6;
+  --teal:     #1abc9c;
+  /* severity */
+  --c-crit:   #e05a2b;
+  --c-fatal:  #e74c3c;
+  --c-rasue:  #f5a623;
+  --c-init:   #4a9eff;
+  --c-warn:   #9b59b6;
+  --c-rasce:  #2dce6a;
+  /* tab accent per module */
+  --xid-col:  #e05a2b;
+  --drv-col:  #4a9eff;
+  --hw-col:   #1abc9c;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;display:flex;flex-direction:column}
+
+/* ══ HEADER ══════════════════════════════════════════ */
+header{
+  border-bottom:1px solid var(--border);
+  padding:0 24px;
+  display:flex;align-items:center;gap:16px;
+  background:linear-gradient(90deg,#0d1018 0%,#0a0c10 100%);
+  height:50px;flex-shrink:0;z-index:50;
+}
+.logo-badge{
+  background:var(--accent);color:#fff;
+  font-family:'Syne',sans-serif;font-weight:800;font-size:11px;letter-spacing:2px;
+  padding:3px 10px;
+  clip-path:polygon(5px 0%,100% 0%,calc(100% - 5px) 100%,0% 100%);
+  flex-shrink:0;
+}
+header h1{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#fff;letter-spacing:.5px}
+header h1 span{color:var(--accent)}
+.hdr-spacer{flex:1}
+.hdr-ver{font-size:10px;color:var(--muted);letter-spacing:1px}
+
+/* ══ MODULE TABS ══════════════════════════════════════ */
+.module-tabs{
+  display:flex;border-bottom:1px solid var(--border);
+  background:var(--surface);flex-shrink:0;
+}
+.mod-tab{
+  padding:0 28px;height:42px;display:flex;align-items:center;gap:9px;
+  font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;
+  text-transform:uppercase;cursor:pointer;border-bottom:3px solid transparent;
+  transition:all .15s;color:var(--muted);user-select:none;
+}
+.mod-tab:hover{color:var(--text);background:#0d1018}
+.mod-tab.active{color:#fff;border-bottom-color:var(--tab-color,var(--accent))}
+.mod-tab .tab-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--tab-color,var(--muted));opacity:.5;transition:opacity .15s;
+}
+.mod-tab.active .tab-dot{opacity:1}
+.tab-count{
+  font-size:9px;padding:1px 5px;border-radius:2px;
+  background:var(--border);color:var(--muted);
+  transition:all .15s;
+}
+.mod-tab.active .tab-count{background:var(--tab-color,var(--accent));color:#fff}
+
+/* ══ MODULE PANELS ════════════════════════════════════ */
+.modules-wrap{flex:1;overflow:hidden;position:relative}
+.module-panel{
+  position:absolute;inset:0;display:none;
+  grid-template-columns:360px 1fr;
+  grid-template-rows:1fr;
+}
+.module-panel.active{display:grid}
+
+/* ══ SHARED LEFT PANEL ════════════════════════════════ */
+.panel-left{
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.panel-title{
+  font-family:'Syne',sans-serif;font-size:10px;font-weight:700;
+  letter-spacing:2px;color:var(--muted);
+  padding:10px 14px 8px;border-bottom:1px solid var(--border);
+  text-transform:uppercase;flex-shrink:0;
+}
+.panel-title span{color:var(--tab-color,var(--accent));margin-right:6px}
+
+/* import zone */
+.import-zone{
+  border:1px dashed var(--border2);background:#080a0d;
+  padding:10px 12px;display:flex;align-items:center;gap:10px;
+  cursor:pointer;transition:border-color .18s,background .18s;position:relative;
+}
+.import-zone:hover,.import-zone.drag-over{border-color:var(--zone-color,var(--accent));background:#110d08}
+.import-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.import-icon{font-size:18px;flex-shrink:0}
+.import-text{flex:1}
+.import-text b{color:var(--accent2);display:block;font-size:11px}
+.import-text span{color:var(--muted);font-size:10px}
+.import-fname{font-size:10px;color:var(--ok);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.import-sep{
+  display:flex;align-items:center;gap:8px;
+  padding:4px 12px;color:var(--muted);font-size:10px;letter-spacing:1px;
+}
+.import-sep::before,.import-sep::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* log input */
+.log-input-wrap{display:flex;flex-direction:column;padding:10px;gap:8px;border-bottom:1px solid var(--border);flex-shrink:0}
+textarea.log-ta{
+  width:100%;height:140px;background:#080a0d;border:1px solid var(--border);
+  color:#8af07a;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.6;
+  resize:vertical;padding:8px;outline:none;transition:border-color .18s;
+}
+textarea.log-ta:focus{border-color:var(--border2)}
+textarea.log-ta::placeholder{color:#1e2e1e}
+.input-hint{font-size:10px;color:var(--muted);line-height:1.6}
+.input-hint b{color:var(--accent2)}
+.btn-row{display:flex;gap:8px}
+
+/* stats bar */
+.stats-bar{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.stat-item{flex:1;padding:8px 6px;border-right:1px solid var(--border);text-align:center}
+.stat-item:last-child{border-right:none}
+.stat-val{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;display:block}
+.stat-lbl{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+
+/* event list */
+.event-list{flex:1;overflow-y:auto;padding:4px 0}
+.event-list::-webkit-scrollbar{width:3px}
+.event-list::-webkit-scrollbar-thumb{background:var(--border2)}
+
+.ev-item{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  cursor:pointer;border-left:3px solid transparent;
+  transition:all .12s;border-bottom:1px solid #0d1018;
+}
+.ev-item:hover{background:#131720}
+.ev-item.active{background:#141a24;border-left-color:var(--item-color,var(--accent))}
+.ev-badge{
+  font-family:'Syne',sans-serif;font-weight:700;font-size:10px;
+  padding:2px 6px;min-width:52px;text-align:center;
+  clip-path:polygon(3px 0%,100% 0%,calc(100% - 3px) 100%,0% 100%);
+  flex-shrink:0;
+}
+.ev-meta{flex:1;min-width:0}
+.ev-name{color:#dce0ea;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev-time{color:var(--muted);font-size:10px;margin-top:1px}
+.ev-cnt{background:var(--border);color:var(--muted);font-size:9px;padding:1px 5px;border-radius:2px;min-width:22px;text-align:center}
+
+/* badge color classes */
+.badge-CRITICAL{background:#2a0f0a;color:var(--c-crit);border:1px solid #5a1a10}
+.badge-FATAL   {background:#1f0a0a;color:var(--c-fatal);border:1px solid #5a1010}
+.badge-RAS_UE  {background:#1a1200;color:var(--c-rasue);border:1px solid #4a3800}
+.badge-RAS_CE  {background:#0a1800;color:var(--c-rasce);border:1px solid #1a4020}
+.badge-NONFATAL{background:#1a0a2a;color:var(--c-warn); border:1px solid #3a1a5a}
+.badge-INIT    {background:#0a1a2a;color:var(--c-init); border:1px solid #1a3a5a}
+.badge-ERROR   {background:#1f0a0a;color:var(--c-fatal);border:1px solid #5a1010}
+.badge-WARNING {background:#1a1200;color:var(--c-rasue);border:1px solid #4a3800}
+.badge-INFO    {background:#0a1a2a;color:var(--c-init); border:1px solid #1a3a5a}
+.badge-HWFAIL  {background:#0a1a18;color:var(--teal);   border:1px solid #1a3a35}
+.badge-UNKNOWN {background:#151820;color:var(--muted);  border:1px solid var(--border2)}
+
+/* ══ SHARED RIGHT PANEL ═══════════════════════════════ */
+.panel-right{display:flex;flex-direction:column;overflow:hidden}
+
+/* detail pane */
+.detail-pane{
+  height:340px;min-height:200px;border-bottom:1px solid var(--border);
+  overflow-y:auto;flex-shrink:0;
+}
+.detail-pane::-webkit-scrollbar{width:3px}
+.detail-pane::-webkit-scrollbar-thumb{background:var(--border2)}
+.detail-placeholder{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;color:var(--muted);gap:8px;
+}
+.detail-placeholder .ph-icon{font-size:32px;opacity:.25}
+.detail-placeholder p{font-size:10px;letter-spacing:1px;text-transform:uppercase}
+
+.detail-card{padding:18px 22px;display:none}
+.detail-card.visible{display:block}
+
+.dc-header{display:flex;align-items:flex-start;gap:14px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.dc-id-num{font-family:'Syne',sans-serif;font-size:30px;font-weight:800;line-height:1;color:#fff}
+.dc-id-num small{font-size:12px;color:var(--muted);font-weight:400;margin-right:3px}
+.dc-title-wrap{flex:1}
+.dc-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:#fff}
+.dc-meta{font-size:10px;color:var(--muted);margin-top:3px;letter-spacing:.5px}
+.dc-badge-lg{
+  font-family:'Syne',sans-serif;font-weight:700;font-size:10px;
+  padding:4px 12px;letter-spacing:1px;text-transform:uppercase;
+  clip-path:polygon(5px 0%,100% 0%,calc(100% - 5px) 100%,0% 100%);
+  flex-shrink:0;
+}
+.dc-sec-title{
+  font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px;margin-top:12px;
+  display:flex;align-items:center;gap:6px;
+}
+.dc-sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.dc-desc{color:var(--text);font-size:12px;line-height:1.7}
+.dc-causes{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.cause-tag{font-size:10px;padding:2px 9px;border:1px solid var(--border2);color:var(--text)}
+.cause-tag.active{border-color:var(--accent2);color:var(--accent2);background:#1a1400}
+.strategy-box{
+  background:#080a0d;padding:10px;
+  border-left:2px solid var(--accent2);
+  white-space:pre-line;font-size:11px;line-height:1.8;color:var(--text);
+}
+.occ-list{display:flex;flex-direction:column;gap:3px;max-height:110px;overflow-y:auto}
+.occ-row{display:flex;gap:8px;align-items:baseline;font-size:10px;padding:3px 8px;background:#080a0d;border-left:2px solid var(--border2)}
+.occ-time{color:var(--muted);white-space:nowrap;min-width:160px}
+.occ-raw{color:#8af07a;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sol-ta{
+  width:100%;min-height:72px;background:#080a0d;border:1px solid var(--border);
+  color:#c8cdd8;font-family:'JetBrains Mono',monospace;font-size:11px;
+  line-height:1.7;padding:8px;resize:vertical;outline:none;transition:border-color .18s;
+  margin-top:6px;
+}
+.sol-ta:focus{border-color:var(--accent)}
+.sol-ta::placeholder{color:var(--muted)}
+.sol-actions{display:flex;gap:8px;margin-top:6px;align-items:center}
+.saved-ind{font-size:10px;color:var(--ok);opacity:0;transition:opacity .3s}
+.saved-ind.show{opacity:1}
+
+/* raw log pane */
+.log-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#080a0d}
+.log-toolbar{
+  display:flex;align-items:center;gap:8px;padding:6px 12px;
+  border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;
+}
+.log-filter{
+  flex:1;background:#080a0d;border:1px solid var(--border);color:var(--text);
+  font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;
+}
+.log-filter::placeholder{color:var(--muted)}
+.log-filter:focus{border-color:var(--border2)}
+.log-lines-wrap{flex:1;overflow-y:auto;padding:4px 0;font-size:11px;line-height:1.65}
+.log-lines-wrap::-webkit-scrollbar{width:3px}
+.log-lines-wrap::-webkit-scrollbar-thumb{background:var(--border2)}
+.ll{display:flex;gap:8px;padding:2px 12px;border-left:2px solid transparent;transition:background .1s}
+.ll:hover{background:#0d1018}
+.ll.hl{border-left-color:var(--hl-color,var(--accent));background:#120d08}
+.ll.hl .ll-txt{color:#f0c090}
+.ll-num{color:#2a3045;min-width:34px;text-align:right;user-select:none}
+.ll-txt{color:#7a8a7a;word-break:break-all}
+
+/* ══ BUTTONS ══════════════════════════════════════════ */
+.btn{
+  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;
+  padding:6px 14px;border:1px solid var(--border2);background:var(--surface);
+  color:var(--text);cursor:pointer;transition:all .15s;letter-spacing:.5px;
+  clip-path:polygon(4px 0%,100% 0%,calc(100% - 4px) 100%,0% 100%);
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:#c04a1f;border-color:#c04a1f;color:#fff}
+.btn-drv{background:var(--info);border-color:var(--info);color:#fff}
+.btn-drv:hover{background:#2a7ed6;border-color:#2a7ed6;color:#fff}
+.btn-hw{background:var(--teal);border-color:var(--teal);color:#fff}
+.btn-hw:hover{background:#16a085;border-color:#16a085;color:#fff}
+.btn-ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn-ok:hover{background:#25b05a;color:#fff;border-color:#25b05a}
+.btn-sm{padding:4px 10px;font-size:10px}
+
+/* empty state */
+.es{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--muted);gap:10px}
+.es-icon{font-size:36px;opacity:.2}
+.es p{font-size:10px;letter-spacing:1px;text-transform:uppercase}
+
+/* ══ EXPORT MODAL ═════════════════════════════════════ */
+.modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center}
+.modal-ov.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border2);width:700px;max-height:82vh;display:flex;flex-direction:column}
+.modal-hdr{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.modal-hdr h3{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:#fff;flex:1}
+.modal-body{flex:1;overflow-y:auto;padding:14px 16px}
+.modal-body pre{background:#080a0d;border:1px solid var(--border);padding:12px;font-size:10px;color:#8af07a;white-space:pre-wrap;word-break:break-all;line-height:1.6;max-height:52vh;overflow-y:auto}
+.modal-ftr{padding:10px 16px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1e2330;border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<header>
+  <div class="logo-badge">HYGON</div>
+  <h1>DCU<span>_diag</span> &nbsp;v2&nbsp; · &nbsp;综合诊断平台</h1>
+  <div class="hdr-spacer"></div>
+  <span class="hdr-ver">KB Rev.2.2.0</span>
+  <button class="btn btn-sm" onclick="openExport()">导出报告</button>
+</header>
+
+<!-- ══ MODULE TABS ══ -->
+<div class="module-tabs">
+  <div class="mod-tab active" style="--tab-color:var(--xid-col)" data-mod="xid" onclick="switchMod('xid')">
+    <div class="tab-dot"></div> XID / SXID 错误
+    <span class="tab-count" id="tc-xid">0</span>
+  </div>
+  <div class="mod-tab" style="--tab-color:var(--drv-col)" data-mod="drv" onclick="switchMod('drv')">
+    <div class="tab-dot"></div> 驱动日志分析
+    <span class="tab-count" id="tc-drv">0</span>
+  </div>
+  <div class="mod-tab" style="--tab-color:var(--hw-col)" data-mod="hw" onclick="switchMod('hw')">
+    <div class="tab-dot"></div> 硬件日志分析
+    <span class="tab-count" id="tc-hw">0</span>
+  </div>
+</div>
+
+<!-- ══ MODULES WRAP ══ -->
+<div class="modules-wrap">
+
+<!-- ─────────────────── XID MODULE ─────────────────── -->
+<div class="module-panel active" id="mod-xid">
+  <div class="panel-left">
+    <div class="panel-title" style="--tab-color:var(--xid-col)"><span>▣</span>XID / SXID 日志输入</div>
+    <div class="log-input-wrap">
+      <div class="import-zone" id="xid-zone" style="--zone-color:var(--xid-col)"
+           ondragover="dragOver(event,'xid-zone')" ondragleave="dragLeave('xid-zone')" ondrop="drop(event,'xid-zone','xid-file','xid-fname','xid-ta',parseXID)">
+        <input type="file" id="xid-file" accept=".log,.txt,.dmesg,text/plain" onchange="fileSelect(event,'xid-fname','xid-ta',parseXID)">
+        <div class="import-icon">📂</div>
+        <div class="import-text"><b>点击选择 / 拖拽日志文件</b><span>.log .txt .dmesg 均支持</span></div>
+        <div class="import-fname" id="xid-fname">未选择</div>
+      </div>
+      <div class="import-sep">或手动粘贴</div>
+      <textarea class="log-ta" id="xid-ta" placeholder="粘贴 dmesg -T 输出…&#10;[Thu Jan  2 10:05:21 2025] hycu 0000:49:00.0: hycu:(serial:ABC)XID:81, pasid:0…"></textarea>
+      <div class="input-hint">支持 <b>dmesg -T</b> 格式，自动提取 <b>XID / SXID</b> 并按时间排序</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" style="flex:1" onclick="parseXID()">▶ 解析</button>
+        <button class="btn" onclick="loadXIDDemo()">示例</button>
+        <button class="btn" onclick="clearMod('xid')">清空</button>
+      </div>
+    </div>
+    <div class="stats-bar" id="xid-stats">
+      <div class="stat-item"><span class="stat-val" id="xs-total" style="color:var(--info)">0</span><span class="stat-lbl">总计</span></div>
+      <div class="stat-item"><span class="stat-val" id="xs-crit"  style="color:var(--c-crit)">0</span><span class="stat-lbl">严重</span></div>
+      <div class="stat-item"><span class="stat-val" id="xs-warn"  style="color:var(--c-rasue)">0</span><span class="stat-lbl">警告</span></div>
+      <div class="stat-item"><span class="stat-val" id="xs-ok"    style="color:var(--c-rasce)">0</span><span class="stat-lbl">可恢复</span></div>
+    </div>
+    <div class="event-list" id="xid-list"><div class="es"><div class="es-icon">📋</div><p>等待日志输入</p></div></div>
+  </div>
+  <div class="panel-right">
+    <div class="detail-pane" id="xid-detail-pane">
+      <div class="detail-placeholder"><div class="ph-icon">🔍</div><p>点击左侧条目查看详情</p></div>
+      <div class="detail-card" id="xid-detail-card"></div>
+    </div>
+    <div class="log-pane">
+      <div class="log-toolbar">
+        <span style="font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">原始日志</span>
+        <input class="log-filter" id="xid-filter" placeholder="过滤…" oninput="filterLog('xid-lines','xid-filter')">
+        <span id="xid-linecnt" style="font-size:10px;color:var(--muted)">0 行</span>
+      </div>
+      <div class="log-lines-wrap" id="xid-lines"><div class="es"><div class="es-icon">📄</div><p>解析后显示原始日志</p></div></div>
+    </div>
+  </div>
+</div><!-- /mod-xid -->
+
+<!-- ─────────────────── DRIVER MODULE ─────────────────── -->
+<div class="module-panel" id="mod-drv">
+  <div class="panel-left">
+    <div class="panel-title" style="--tab-color:var(--drv-col)"><span>▣</span>驱动日志输入</div>
+    <div class="log-input-wrap">
+      <div class="import-zone" id="drv-zone" style="--zone-color:var(--drv-col)"
+           ondragover="dragOver(event,'drv-zone')" ondragleave="dragLeave('drv-zone')" ondrop="drop(event,'drv-zone','drv-file','drv-fname','drv-ta',parseDRV)">
+        <input type="file" id="drv-file" accept=".log,.txt,text/plain" onchange="fileSelect(event,'drv-fname','drv-ta',parseDRV)">
+        <div class="import-icon">📂</div>
+        <div class="import-text"><b>点击选择 / 拖拽驱动日志</b><span>drvdiag 输出 / kern.log / messages</span></div>
+        <div class="import-fname" id="drv-fname">未选择</div>
+      </div>
+      <div class="import-sep">或手动粘贴</div>
+      <textarea class="log-ta" id="drv-ta" placeholder="粘贴驱动日志…&#10;支持 drvdiag、/var/log/messages、kern.log 等&#10;&#10;示例：&#10;[ERROR] hycu: failed to load firmware amdgpu/gc_11_0_0_pfp.bin&#10;[WARN]  hycu: ring gfx timeout, hard resetting…"></textarea>
+      <div class="input-hint">支持 <b>drvdiag</b>、<b>kern.log</b>、<b>messages</b> 等驱动相关日志格式</div>
+      <div class="btn-row">
+        <button class="btn btn-drv" style="flex:1" onclick="parseDRV()">▶ 解析</button>
+        <button class="btn" onclick="loadDRVDemo()">示例</button>
+        <button class="btn" onclick="clearMod('drv')">清空</button>
+      </div>
+    </div>
+    <div class="stats-bar">
+      <div class="stat-item"><span class="stat-val" id="ds-total" style="color:var(--info)">0</span><span class="stat-lbl">总计</span></div>
+      <div class="stat-item"><span class="stat-val" id="ds-err"   style="color:var(--c-crit)">0</span><span class="stat-lbl">ERROR</span></div>
+      <div class="stat-item"><span class="stat-val" id="ds-warn"  style="color:var(--c-rasue)">0</span><span class="stat-lbl">WARN</span></div>
+      <div class="stat-item"><span class="stat-val" id="ds-info"  style="color:var(--c-init)">0</span><span class="stat-lbl">INFO</span></div>
+    </div>
+    <div class="event-list" id="drv-list"><div class="es"><div class="es-icon">🔧</div><p>等待驱动日志输入</p></div></div>
+  </div>
+  <div class="panel-right">
+    <div class="detail-pane" id="drv-detail-pane">
+      <div class="detail-placeholder"><div class="ph-icon">🔍</div><p>点击左侧条目查看详情</p></div>
+      <div class="detail-card" id="drv-detail-card"></div>
+    </div>
+    <div class="log-pane">
+      <div class="log-toolbar">
+        <span style="font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">原始日志</span>
+        <input class="log-filter" id="drv-filter" placeholder="过滤…" oninput="filterLog('drv-lines','drv-filter')">
+        <span id="drv-linecnt" style="font-size:10px;color:var(--muted)">0 行</span>
+      </div>
+      <div class="log-lines-wrap" id="drv-lines"><div class="es"><div class="es-icon">📄</div><p>解析后显示原始日志</p></div></div>
+    </div>
+  </div>
+</div><!-- /mod-drv -->
+
+<!-- ─────────────────── HARDWARE MODULE ─────────────────── -->
+<div class="module-panel" id="mod-hw">
+  <div class="panel-left">
+    <div class="panel-title" style="--tab-color:var(--hw-col)"><span>▣</span>硬件日志输入</div>
+    <div class="log-input-wrap">
+      <div class="import-zone" id="hw-zone" style="--zone-color:var(--hw-col)"
+           ondragover="dragOver(event,'hw-zone')" ondragleave="dragLeave('hw-zone')" ondrop="drop(event,'hw-zone','hw-file','hw-fname','hw-ta',parseHW)">
+        <input type="file" id="hw-file" accept=".log,.txt,text/plain" onchange="fileSelect(event,'hw-fname','hw-ta',parseHW)">
+        <div class="import-icon">📂</div>
+        <div class="import-text"><b>点击选择 / 拖拽硬件日志</b><span>HyFieldDiag / hy-smi / IPMI / BMC 日志</span></div>
+        <div class="import-fname" id="hw-fname">未选择</div>
+      </div>
+      <div class="import-sep">或手动粘贴</div>
+      <textarea class="log-ta" id="hw-ta" placeholder="粘贴硬件诊断日志…&#10;支持 HyFieldDiag、hy-smi、IPMI sel list、BMC 事件日志&#10;&#10;示例：&#10;[HyFieldDiag] FAIL: UMC ECC uncorrectable error detected on HBM channel 2&#10;[hy-smi] Temperature: 101°C  Threshold: 95°C  Status: CRITICAL"></textarea>
+      <div class="input-hint">支持 <b>HyFieldDiag</b>、<b>hy-smi</b>、<b>IPMI</b>、<b>BMC</b> 等硬件诊断工具输出</div>
+      <div class="btn-row">
+        <button class="btn btn-hw" style="flex:1" onclick="parseHW()">▶ 解析</button>
+        <button class="btn" onclick="loadHWDemo()">示例</button>
+        <button class="btn" onclick="clearMod('hw')">清空</button>
+      </div>
+    </div>
+    <div class="stats-bar">
+      <div class="stat-item"><span class="stat-val" id="hs-total" style="color:var(--info)">0</span><span class="stat-lbl">总计</span></div>
+      <div class="stat-item"><span class="stat-val" id="hs-fail"  style="color:var(--c-crit)">0</span><span class="stat-lbl">FAIL</span></div>
+      <div class="stat-item"><span class="stat-val" id="hs-warn"  style="color:var(--c-rasue)">0</span><span class="stat-lbl">WARN</span></div>
+      <div class="stat-item"><span class="stat-val" id="hs-pass"  style="color:var(--c-rasce)">0</span><span class="stat-lbl">PASS</span></div>
+    </div>
+    <div class="event-list" id="hw-list"><div class="es"><div class="es-icon">🖥️</div><p>等待硬件日志输入</p></div></div>
+  </div>
+  <div class="panel-right">
+    <div class="detail-pane" id="hw-detail-pane">
+      <div class="detail-placeholder"><div class="ph-icon">🔍</div><p>点击左侧条目查看详情</p></div>
+      <div class="detail-card" id="hw-detail-card"></div>
+    </div>
+    <div class="log-pane">
+      <div class="log-toolbar">
+        <span style="font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">原始日志</span>
+        <input class="log-filter" id="hw-filter" placeholder="过滤…" oninput="filterLog('hw-lines','hw-filter')">
+        <span id="hw-linecnt" style="font-size:10px;color:var(--muted)">0 行</span>
+      </div>
+      <div class="log-lines-wrap" id="hw-lines"><div class="es"><div class="es-icon">📄</div><p>解析后显示原始日志</p></div></div>
+    </div>
+  </div>
+</div><!-- /mod-hw -->
+
+</div><!-- /modules-wrap -->
+
+<!-- ══ EXPORT MODAL ══ -->
+<div class="modal-ov" id="exportModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3>导出综合诊断报告</h3>
+      <button class="btn btn-sm" onclick="closeExport()">✕ 关闭</button>
+      <button class="btn btn-ok btn-sm" onclick="downloadReport()">⬇ 下载报告</button>
+    </div>
+    <div class="modal-body"><pre id="exportPre"></pre></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════
+//  ① XID / SXID 知识库
+// ═══════════════════════════════════════════════════════════════
+const XID_DB = {
+  1:{name:'UMC CE',cat:'RAS_CE',type:'RAS Error',causes:['HW Error','FB Corruption'],
+    desc:'UMC 内存控制器可纠正 RAS 错误（CE），已自动修复，不影响当前运行。',
+    strategy:'纳入日常监控。若 CE 频率持续升高，建议排查 HBM 显存健康状态，运行 HyFieldDiag。'},
+  2:{name:'UMC UE',cat:'RAS_UE',type:'RAS Error',causes:['HW Error','FB Corruption'],
+    desc:'UMC 内存控制器不可纠正 RAS 错误（UE）。通常源于 HBM 显存故障，计算结果可能已出错，建议立即停止任务。DCU 驱动将自动启用行重映射与动态页隔离机制。',
+    strategy:'1. 立即停止当前任务\n2. 运行 HyFieldDiag 进行系统修复\n3. 修复失败可走 RMA 流程\n4. 联系硬件供应商获取支持'},
+  3:{name:'GFX CE',cat:'RAS_CE',type:'RAS Error',causes:['HW Error'],desc:'GFX 图形引擎可纠正 RAS 错误（CE），已自动修复。',strategy:'保持监控。频繁出现时运行 HyFieldDiag。'},
+  4:{name:'GFX UE',cat:'RAS_UE',type:'RAS Error',causes:['HW Error'],desc:'GFX 图形引擎不可纠正 RAS 错误（UE）。DCU 将触发 CU harvest 流程。',strategy:'1. 停止任务，等待 DCU Recovery\n2. 若 XID 复现，运行 HyFieldDiag\n3. 修复失败走 RMA 流程'},
+  5:{name:'SDMA CE',cat:'RAS_CE',type:'RAS Error',causes:['HW Error'],desc:'SDMA DMA 引擎可纠正 RAS 错误（CE）。',strategy:'保持监控。频繁出现时运行 HyFieldDiag。'},
+  6:{name:'SDMA UE',cat:'RAS_UE',type:'RAS Error',causes:['HW Error'],desc:'SDMA DMA 引擎不可纠正 RAS 错误（UE）。',strategy:'1. 重启节点\n2. 不能恢复则报修处理'},
+  7:{name:'MMHUB CE',cat:'RAS_CE',type:'RAS Error',causes:['HW Error'],desc:'MMHUB 内存中心可纠正 RAS 错误（CE）。',strategy:'保持监控。'},
+  8:{name:'MMHUB UE',cat:'RAS_UE',type:'RAS Error',causes:['HW Error'],desc:'MMHUB 内存中心不可纠正 RAS 错误（UE）。',strategy:'1. 重启节点\n2. 不能恢复则报修处理'},
+  9:{name:'ATHUB CE',cat:'RAS_CE',type:'RAS Error',causes:['HW Error'],desc:'ATHUB 访问控制中心可纠正 RAS 错误（CE）。',strategy:'保持监控。'},
+  10:{name:'ATHUB UE',cat:'RAS_UE',type:'RAS Error',causes:['HW Error'],desc:'ATHUB 访问控制中心不可纠正 RAS 错误（UE）。',strategy:'1. 重启节点\n2. 不能恢复则报修处理'},
+  11:{name:'NBIO CE',cat:'RAS_CE',type:'RAS Error',causes:['HW Error'],desc:'NBIO 北桥 IO 可纠正 RAS 错误（CE）。',strategy:'保持监控。'},
+  12:{name:'NBIO UE',cat:'RAS_UE',type:'RAS Error',causes:['HW Error'],desc:'NBIO 北桥 IO 不可纠正 RAS 错误（UE）。',strategy:'1. 重启节点\n2. 不能恢复则报修处理'},
+  13:{name:'HDP CE',cat:'RAS_CE',type:'RAS Error',causes:['HW Error'],desc:'HDP 主机数据通路可纠正 RAS 错误（CE）。',strategy:'保持监控。'},
+  14:{name:'HDP UE',cat:'RAS_UE',type:'RAS Error',causes:['HW Error'],desc:'HDP 主机数据通路不可纠正 RAS 错误（UE）。',strategy:'1. 重启节点\n2. 不能恢复则报修处理'},
+  15:{name:'HSL CE',cat:'RAS_CE',type:'RAS Error',causes:['HW Error'],desc:'HSL 高速链路可纠正 RAS 错误（CE）。',strategy:'保持监控。'},
+  16:{name:'HSL UE',cat:'RAS_UE',type:'RAS Error',causes:['HW Error'],desc:'HSL 高速链路不可纠正 RAS 错误（UE）。',strategy:'1. 重启节点\n2. 不能恢复则报修处理'},
+  17:{name:'DF CE',cat:'RAS_CE',type:'RAS Error',causes:['HW Error'],desc:'DF 数据结构可纠正 RAS 错误（CE）。',strategy:'保持监控。'},
+  18:{name:'DF UE',cat:'RAS_UE',type:'RAS Error',causes:['HW Error'],desc:'DF 数据结构不可纠正 RAS 错误（UE）。',strategy:'1. 重启节点\n2. 不能恢复则报修处理'},
+  29:{name:'MCA CE',cat:'RAS_CE',type:'RAS Error',causes:['HW Error'],desc:'MCA 机器检查架构可纠正 RAS 错误（CE）。',strategy:'保持监控。'},
+  30:{name:'MCA UE',cat:'RAS_UE',type:'RAS Error',causes:['HW Error'],desc:'MCA 机器检查架构不可纠正 RAS 错误（UE）。',strategy:'1. 重启节点\n2. 不能恢复则报修处理'},
+  50:{name:'High temperature',cat:'CRITICAL',type:'Critical Error',causes:['HW Error','Thermal Issue'],
+    desc:'DCU 高温警告。温度超过安全阈值，可能导致性能降频或保护性关闭。',
+    strategy:'1. 执行系统 AC/DC 重启尝试恢复\n2. 检查散热系统（风扇、导热硅脂、进风口堵塞）\n3. 确认机房环境温度是否超标\n4. 如问题复现，联系硬件供应商'},
+  51:{name:'DCU isolation',cat:'CRITICAL',type:'Critical Error',causes:['HW Error','Driver Error','FB Corruption','Thermal Issue'],
+    desc:'DCU 卡故障隔离。检测到严重故障，系统已将该 DCU 隔离，无法在线恢复，必须人员现场干预。',
+    strategy:'1. 执行系统 AC/DC 重启尝试修复\n2. 如问题复现，运行 HyFieldDiag 诊断\n3. 确认硬件故障后报修或走 RMA 流程'},
+  76:{name:'QCM fence timeout',cat:'FATAL',type:'Fatal Error',causes:['Driver Error'],
+    desc:'DCU 卡 QCM 命令队列栅栏超时。GPU 命令未在预期时间内完成，导致任务中断。',
+    strategy:'1. 放弃当前作业，重启节点\n2. 重启后进行 DCU 压力测试确认稳定性\n3. 若故障复现，联系硬件供应商'},
+  77:{name:'HDP timeout',cat:'FATAL',type:'Fatal Error',causes:['HW Error','Driver Error'],
+    desc:'HDP 主机数据通路超时。主机与 DCU 之间的数据传输发生超时。',
+    strategy:'1. 重启节点\n2. 重启后压力测试\n3. 故障复现则联系供应商'},
+  81:{name:'VM fault',cat:'FATAL',type:'Fatal Error',causes:['HW Error','Driver Error','User APP Error','FB Corruption'],
+    desc:'DCU 虚拟内存访问故障。GPU 访问了无效内存地址，可能由用户应用程序、驱动 Bug 或硬件问题引起。',
+    strategy:'1. 检查用户应用程序内存访问逻辑\n2. 更新驱动版本\n3. 重启节点并压力测试\n4. 故障持续则联系供应商'},
+  82:{name:'ATHUB error',cat:'FATAL',type:'Fatal Error',causes:['HW Error','Driver Error','FB Corruption'],
+    desc:'PCIe 上行传输错误（ATHUB）。PCIe 上行通道出现传输错误。',
+    strategy:'1. 重启节点\n2. 检查 PCIe 连接及 BIOS 设置\n3. 故障复现则报修'},
+  87:{name:'Driver firmware error',cat:'INIT',type:'Init Error',causes:['HW Error','Driver Error','FB Corruption'],
+    desc:'DCU 卡驱动或固件加载失败。驱动加载阶段出错，设备无法正常初始化。',
+    strategy:'1. 检查 DCU 驱动和固件版本是否正常安装\n2. 检查节点 DCU 是否硬件故障\n3. 尝试手动加载驱动\n4. 收集日志联系供应商'},
+  111:{name:'MEC warning',cat:'NONFATAL',type:'Non-Fatal Error',causes:['Driver Error'],
+    desc:'DCU MEC 微引擎控制器警告，当前不影响运行，但需关注后续状态。',
+    strategy:'持续监控。如后续出现其他 XID 或稳定性下降，运行 HyFieldDiag 检测。'},
+  112:{name:'MEC error',cat:'FATAL',type:'Fatal Error',causes:['HW Error','Driver Error'],
+    desc:'DCU MEC 微引擎控制器错误，MEC 固件或硬件出现严重问题。',
+    strategy:'1. 重启节点\n2. 压力测试确认稳定性\n3. 故障复现则联系供应商'},
+  120:{name:'ECC page retirement / row remapping',cat:'NONFATAL',type:'Non-Fatal Error',causes:['HW Error','Driver Error','FB Corruption'],
+    desc:'发生 HBM ECC 页面退役或行重映射事件，驱动已启动自动修复机制。',
+    strategy:'持续监控。频繁出现时运行 HyFieldDiag，确认 HBM 健康状态。'},
+  122:{name:'Row remapping recording failure',cat:'FATAL',type:'Fatal Error',causes:['HW Error','Driver Error','FB Corruption'],
+    desc:'HBM 行重映射记录失败，HBM 显存的行修复机制执行失败，可能导致数据损坏。',
+    strategy:'1. 重启节点\n2. 若故障复现，运行 HyFieldDiag\n3. 确认硬件故障后报修'},
+  124:{name:'GFX CU Harvest event',cat:'FATAL',type:'Fatal Error',causes:['HW Error','Driver Error'],
+    desc:'GFX 计算单元（CU）回收事件，部分 CU 因故障被系统回收，DCU 算力有所下降。',
+    strategy:'1. 重启后观察\n2. 若 XID 复现，运行 HyFieldDiag 定位问题'},
+  130:{name:'High single-bit ECC error rate',cat:'NONFATAL',type:'Non-Fatal Error',causes:['HW Error','FB Corruption'],
+    desc:'DCU 单比特 ECC 纠错率过高。高频率预示 HBM 可能存在潜在硬件问题。',
+    strategy:'1. 提前做好维护准备\n2. 运行 HyFieldDiag 检测 HBM 健康状态\n3. 考虑计划性硬件更换'},
+  160:{name:'PCIE link lost',cat:'CRITICAL',type:'Critical Error',causes:['HW Error','Driver Error'],
+    desc:'DCU 卡 PCIe 链路丢失，CPU 与 DCU 之间的 PCIe 通信中断，设备无法访问。',
+    strategy:'1. 重启节点\n2. 检查 PCIe 插槽及线缆连接\n3. 不能恢复则报修处理'},
+  190:{name:'DCU initialization failure',cat:'INIT',type:'Init Error',causes:['HW Error','Driver Error','FB Corruption'],
+    desc:'DCU 卡驱动初始化失败，PCIe 枚举已成功，但驱动初始化阶段失败。',
+    strategy:'1. 检查驱动和固件版本\n2. 重新安装驱动\n3. 如问题持续，联系供应商'},
+  200:{name:'VBIOS initial failure',cat:'INIT',type:'Init Error',causes:['HW Error','Driver Error'],
+    desc:'VBIOS 启动失败，DCU 视频 BIOS 无法正常启动，设备无法初始化。',
+    strategy:'1. 检查 VBIOS 固件版本\n2. 尝试重新烧录 VBIOS\n3. 硬件故障则联系供应商'},
+  201:{name:'VBIOS read failure',cat:'INIT',type:'Init Error',causes:['HW Error','Driver Error'],
+    desc:'VBIOS 加载失败，无法从设备读取 VBIOS 内容。',
+    strategy:'1. 检查 VBIOS 固件完整性\n2. 重新烧录 VBIOS\n3. 硬件故障则联系供应商'},
+  300:{name:'SMU initial failure',cat:'INIT',type:'Init Error',causes:['HW Error','Driver Error'],
+    desc:'SMU 固件异常或加载失败，设备电源管理功能无法正常工作。',
+    strategy:'1. 检查 SMU 固件版本\n2. 重新安装驱动固件\n3. 故障持续则联系供应商'},
+  301:{name:'SMU hotpot notice',cat:'NONFATAL',type:'Non-Fatal Error',causes:['HW Error','Driver Error','Thermal Issue'],
+    desc:'SMU 热点区域温度临界通知，温度接近阈值，请关注冷却状态。',
+    strategy:'1. 检查散热系统运行状态\n2. 降低工作负载以减少热量\n3. 监控温度趋势'},
+};
+const SXID_DB = {
+  200:{name:'HySwitch Drv Probe Failed',cat:'CRITICAL',type:'SXID HW Error',causes:['HySwitch Error'],
+    desc:'HySwitch 驱动加载失败，节点 HySwitch 驱动初始化失败，节点资源无法正常使用。',
+    strategy:'1. 检查 HySwitch 驱动和固件版本是否正常安装\n2. 重启节点，确认故障是否复现\n3. 若故障复现，运行故障侦测套件定位问题\n4. 故障无法恢复，报告技服人员处理'},
+  201:{name:'HySwitch Read Reg Timeout',cat:'CRITICAL',type:'SXID HW Error',causes:['HySwitch Error'],
+    desc:'HySwitch 读取寄存器超时，驱动初始化失败，节点资源无法正常使用。',
+    strategy:'1. 检查 HySwitch 驱动和固件版本\n2. 重启节点确认是否复现\n3. 复现则运行故障侦测套件，无法恢复则报修'},
+  203:{name:'HySwitch FW Version Verify Result',cat:'NONFATAL',type:'SXID HW Error',causes:['HySwitch Error'],
+    desc:'HySwitch 固件与驱动版本号不匹配，需更新固件以匹配驱动。',
+    strategy:'1. 升级节点驱动对应版本固件包\n2. 若升级失败，可报告技服人员处理'},
+  204:{name:'HySwitch HSL Link Chain UE',cat:'CRITICAL',type:'SXID HW Error',causes:['HySwitch Error'],
+    desc:'HSL link 传输数据过程中 UE 错误，节点 HSL link 通路数据出现不可恢复错误，运行中作业不可信。',
+    strategy:'1. 放弃当前作业，尝试重启节点\n2. 如故障复现，重新部署驱动及固件\n3. 若故障不可恢复，运行故障侦测套件，无法处理则报修'},
+  205:{name:'HySwitch HSL Link Chain CE',cat:'NONFATAL',type:'SXID HW Error',causes:['HySwitch Error'],
+    desc:'HSL link 传输数据过程中 CE 错误，节点 HSL link 通路数据出现可恢复告警。',
+    strategy:'1. 尝试重启节点并观察是否复现\n2. 如故障复现，重新部署驱动及固件\n3. 不可恢复则运行故障侦测套件，无法处理则报修'},
+  206:{name:'HySwitch R5 ERR',cat:'CRITICAL',type:'SXID HW Error',causes:['HySwitch Error'],
+    desc:'HySwitch R5 上报错误，HySwitch 运行时系统故障，节点 HySwitch 内部故障，需节点 DC 修复。',
+    strategy:'1. 放弃当前作业，重启节点\n2. 如故障复现，重新部署驱动及固件\n3. 不可恢复则报修'},
+  207:{name:'HySwitch PCIe Link Lost',cat:'CRITICAL',type:'SXID HW Error',causes:['HySwitch Error'],
+    desc:'HySwitch PCIe 链路问题，HySwitch 芯片与 CPU PCIe 断链，需节点 DC 修复。',
+    strategy:'1. 尝试重启确认故障可否恢复\n2. 通过带外管理升级固件\n3. 若无法恢复，报告技服人员处理'},
+  251:{name:'HySwitch Drv Load failed',cat:'CRITICAL',type:'SXID HFM Error',causes:['HFM Error'],
+    desc:'HFM 管理任务上报 HySwitch 驱动加载失败，节点 DCU 驱动初始化失败，DCU 资源无法正常使用。',
+    strategy:'1. 放弃当前作业，重启节点\n2. 如故障复现，重新部署驱动及固件\n3. 不可恢复则运行故障侦测套件，无法处理则报修'},
+  253:{name:'HySwitch Num not Match',cat:'CRITICAL',type:'SXID HFM Error',causes:['HFM Error'],
+    desc:'HySwitch 个数与配置文件中的个数不匹配，节点 HySwitch 设备未初始化。',
+    strategy:'1. 重启节点确认故障\n2. 通过带外管理升级固件\n3. 无法恢复则报告技服人员处理'},
+  255:{name:'HySwitch Linking error',cat:'CRITICAL',type:'SXID HFM Error',causes:['HFM Error'],
+    desc:'HySwitch 建链出错，DCU 驱动无法加载。',
+    strategy:'1. 重启节点\n2. 升级固件\n3. 无法恢复则报告技服人员'},
+  257:{name:'HySwitch reset error',cat:'CRITICAL',type:'SXID HFM Error',causes:['HFM Error'],
+    desc:'HySwitch 复位失败。',
+    strategy:'1. 重启节点\n2. 升级固件\n3. 无法恢复则报告技服人员'},
+  259:{name:'Reset DCU error without DCU Driver',cat:'CRITICAL',type:'SXID HFM Error',causes:['HFM Error'],
+    desc:'在无 DCU 驱动时，复位 DCU 出错。',
+    strategy:'1. 重启节点\n2. 重新部署驱动固件\n3. 无法恢复则报告技服人员'},
+  261:{name:'Reset system reach max time',cat:'CRITICAL',type:'SXID HFM Error',causes:['HFM Error'],
+    desc:'复位整机系统失败已达到最大次数。',
+    strategy:'1. 检查整机硬件状态\n2. 联系技服人员处理'},
+  262:{name:'Read DCU register failed',cat:'CRITICAL',type:'SXID HFM Error',causes:['HFM Error'],
+    desc:'读取 DCU 寄存器出错，DCU 可能掉卡。',
+    strategy:'1. 检查 DCU 卡物理连接\n2. 重启确认掉卡是否复现\n3. 硬件故障则报修'},
+  263:{name:'Read DCU/HySwitch num failed',cat:'CRITICAL',type:'SXID HFM Error',causes:['HFM Error'],
+    desc:'读取 DCU/HySwitch 个数出错，可能存在 DCU 或 HySwitch 硬件问题。',
+    strategy:'1. 检查硬件连接\n2. 重启\n3. 无法恢复则报修'},
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  ② 驱动故障知识库
+// ═══════════════════════════════════════════════════════════════
+const DRV_KB = [
+  { id:'DRV001', pattern:/failed to load firmware|firmware.*not found|no such file.*\.bin/i,
+    name:'固件文件加载失败', cat:'ERROR', severity:'ERROR',
+    desc:'驱动无法找到或加载所需固件文件（.bin）。固件文件缺失、路径错误或文件损坏均可导致此问题。',
+    causes:['固件文件未安装','驱动版本与固件版本不匹配','固件文件损坏','/lib/firmware 目录权限异常'],
+    strategy:'1. 检查 /lib/firmware/amdgpu/ 目录下固件文件是否存在\n2. 重新安装 HYGON DCU 驱动包（含固件）\n3. 确认驱动版本与固件版本配套\n4. 运行：dkms status 查看驱动编译状态'},
+  { id:'DRV002', pattern:/ring.*timeout|gfx.*timeout|sdma.*timeout|compute.*timeout/i,
+    name:'GPU 环形缓冲区超时', cat:'ERROR', severity:'ERROR',
+    desc:'GPU 命令环超时，命令在规定时间内未得到响应，通常触发 GPU Reset 流程。可能由硬件挂起、驱动 bug 或工作负载异常引起。',
+    causes:['GPU 硬件挂起','工作负载导致 GPU 长时间无响应','驱动版本 bug','PCIe 通信异常'],
+    strategy:'1. 检查是否同时出现 XID 错误（尤其 XID 76/77）\n2. 更新驱动至最新稳定版本\n3. 尝试降低工作负载后复现\n4. 运行 HyFieldDiag 排查硬件问题'},
+  { id:'DRV003', pattern:/gpu reset|hard reset|soft reset|amdgpu.*reset/i,
+    name:'GPU Reset 事件', cat:'WARNING', severity:'WARNING',
+    desc:'驱动执行了 GPU 重置操作，通常是从超时或其他严重错误中恢复的手段。Reset 成功后系统可继续运行，但 Reset 失败则意味着硬件可能存在问题。',
+    causes:['从环超时恢复','从 VM fault 恢复','从 RAS UE 恢复'],
+    strategy:'1. 检查 Reset 前的日志行以确认根因\n2. 若 Reset 失败（fail/unable to reset），需重启节点\n3. 频繁 Reset 表明需要深入排查'},
+  { id:'DRV004', pattern:/failed to allocate|out of memory|oom|cannot allocate/i,
+    name:'内存分配失败', cat:'ERROR', severity:'ERROR',
+    desc:'驱动申请内存失败，可能是系统内存不足、显存耗尽或内存碎片化导致。',
+    causes:['系统内存不足（OOM）','DCU 显存（VRAM）耗尽','大页内存配置问题','内存泄漏'],
+    strategy:'1. 检查系统可用内存：free -h\n2. 检查 DCU 显存使用：hy-smi --query-gpu=memory.used\n3. 重启相关进程释放内存\n4. 检查应用程序内存使用模式'},
+  { id:'DRV005', pattern:/pcie.*error|aer.*error|correctable.*error.*pcie|uncorrectable.*error.*pcie/i,
+    name:'PCIe AER 错误', cat:'ERROR', severity:'ERROR',
+    desc:'PCIe 高级错误报告（AER）检测到链路错误，包括可纠正错误（CE）和不可纠正错误（UCE）。',
+    causes:['PCIe 链路信号质量差','PCIe 插槽或卡边金手指污染','PCIe 线缆松动','主板 PCIe 控制器问题'],
+    strategy:'1. 检查 PCIe 卡是否牢固插入\n2. 清洁 PCIe 金手指\n3. 确认 PCIe 链路速率和宽度：hy-smi -q | grep -i pcie\n4. 尝试更换 PCIe 槽位'},
+  { id:'DRV006', pattern:/dkms.*error|module.*not found|insmod.*failed|modprobe.*error/i,
+    name:'驱动模块加载失败', cat:'ERROR', severity:'ERROR',
+    desc:'内核模块加载失败，驱动无法注册到系统。通常发生在内核升级后驱动未重新编译，或内核版本不兼容时。',
+    causes:['内核版本与驱动不兼容','DKMS 编译失败','内核头文件缺失','签名验证失败（Secure Boot）'],
+    strategy:'1. 检查内核版本：uname -r\n2. 重新编译 DKMS 模块：dkms autoinstall\n3. 安装对应内核头文件：apt/yum install kernel-devel\n4. Secure Boot 已开启则需签名或关闭'},
+  { id:'DRV007', pattern:/thermal.*throttl|power.*limit|clock.*throttl/i,
+    name:'温度/功耗降频', cat:'WARNING', severity:'WARNING',
+    desc:'DCU 因过热或功耗超限而主动降低工作频率，导致性能下降。',
+    causes:['散热不足','环境温度过高','功耗墙设置过低','风扇故障'],
+    strategy:'1. 检查温度：hy-smi --query-gpu=temperature.gpu\n2. 检查风扇转速：hy-smi --query-gpu=fan.speed\n3. 改善散热环境，清理积灰\n4. 确认 TDP 配置是否合理'},
+  { id:'DRV008', pattern:/device.*not found|no.*device|cannot open.*device|device.*disappeared/i,
+    name:'设备未找到/消失', cat:'ERROR', severity:'ERROR',
+    desc:'驱动无法找到 DCU 设备，或设备在运行中突然消失，通常对应物理掉卡或 PCIe 链路中断。',
+    causes:['PCIe 物理连接松动','DCU 卡电源问题','XID 160（PCIe link lost）','BMC/服务器管理操作意外重置了 PCIe'],
+    strategy:'1. 检查 XID 日志中是否有 XID 160 或 XID 51\n2. 物理检查卡的连接状态\n3. 重新上电确认设备可见：lspci | grep -i hygon\n4. 检查服务器电源供给'},
+  { id:'DRV009', pattern:/version mismatch|abi.*mismatch|api.*mismatch|incompatible/i,
+    name:'驱动/固件版本不匹配', cat:'WARNING', severity:'WARNING',
+    desc:'检测到驱动版本与固件、库或其他组件版本不匹配，可能导致功能异常或稳定性问题。',
+    causes:['升级驱动后未同步升级固件','混用不同版本的驱动组件','ROCm 版本与驱动不配套'],
+    strategy:'1. 确认驱动版本：hy-smi --version\n2. 确认固件版本并与驱动发布说明比对\n3. 按官方文档整套升级驱动+固件+ROCm\n4. 避免部分升级'},
+  { id:'DRV010', pattern:/hang|hung|deadlock|not responding/i,
+    name:'驱动/GPU 挂起', cat:'ERROR', severity:'ERROR',
+    desc:'GPU 或驱动进入无响应状态，可能表现为进程卡死、系统无法访问 DCU 设备。',
+    causes:['GPU 死锁','用户态驱动崩溃','固件 bug','硬件异常'],
+    strategy:'1. 尝试终止相关进程（kill -9 <pid>）\n2. 若无法恢复，重启节点\n3. 收集 drvdiag 日志提交技术支持\n4. 更新驱动版本'},
+];
+
+// ═══════════════════════════════════════════════════════════════
+//  ③ 硬件故障知识库
+// ═══════════════════════════════════════════════════════════════
+const HW_KB = [
+  { id:'HW001', pattern:/umc.*ecc.*uncorrectable|hbm.*ue|memory.*uncorrectable|ecc.*fail/i,
+    name:'HBM 显存不可纠正 ECC 错误', cat:'HWFAIL', severity:'FAIL',
+    component:'HBM Memory',
+    desc:'HBM 显存检测到不可纠正 ECC 错误（UE），数据完整性已无法保证，计算结果不可信。',
+    causes:['HBM 颗粒老化/损坏','HBM 接口电气问题','高温导致的位翻转'],
+    strategy:'1. 立即停止所有计算任务\n2. 运行 HyFieldDiag 定位具体 HBM 通道\n3. 检查 ECC page retirement 状态\n4. 若修复失败，走 RMA 流程替换 DCU 卡'},
+  { id:'HW002', pattern:/temperature.*critical|temp.*over|overheat|thermal.*shutdown|temp.*\b(9[5-9]|1[0-9]{2})\b/i,
+    name:'DCU 温度超限', cat:'HWFAIL', severity:'FAIL',
+    component:'Thermal',
+    desc:'DCU 核心温度超过临界阈值（通常 ≥95°C），已触发或即将触发热保护关机。持续高温会加速硬件损耗。',
+    causes:['散热模块故障（风扇损坏、导热硅脂失效）','进风口堵塞','机房环境温度超标','工作负载过高'],
+    strategy:'1. 立即检查风扇转速（hy-smi --query-gpu=fan.speed）\n2. 检查机房温度和气流\n3. 清理散热鳍片积灰\n4. 降低负载或暂停任务\n5. 检查导热硅脂是否需要重涂'},
+  { id:'HW003', pattern:/pcie.*link.*down|pcie.*link.*lost|link.*width.*x0|no.*link/i,
+    name:'PCIe 链路断开', cat:'HWFAIL', severity:'FAIL',
+    component:'PCIe',
+    desc:'PCIe 链路检测失败或链路已断开，系统无法与 DCU 卡通信。',
+    causes:['DCU 卡物理松动','PCIe 插槽损坏','服务器重置/热插拔异常','PCIe 重驱器（Retimer）故障'],
+    strategy:'1. 物理重新插拔 DCU 卡（断电操作）\n2. 检查服务器背板 PCIe 总线：lspci -vv\n3. 尝试更换 PCIe 槽位\n4. 检查 BIOS 中 PCIe 设置是否正常\n5. 联系服务器硬件厂商'},
+  { id:'HW004', pattern:/fan.*fail|fan.*error|fan.*speed.*0|cooling.*fail/i,
+    name:'风扇故障', cat:'HWFAIL', severity:'FAIL',
+    component:'Cooling',
+    desc:'检测到 DCU 卡风扇或服务器风扇故障，转速为 0 或低于阈值，散热能力严重下降。',
+    causes:['风扇轴承磨损','风扇电缆断路','风扇控制器故障'],
+    strategy:'1. 通过 hy-smi 或 BMC 确认风扇转速\n2. 立即降低 DCU 负载防止过热\n3. 安排更换故障风扇\n4. 在风扇更换前持续监控温度'},
+  { id:'HW005', pattern:/power.*fail|psu.*fail|voltage.*out.*range|undervolt|overvolt|12v.*\b[0-9]/i,
+    name:'电源/电压异常', cat:'HWFAIL', severity:'FAIL',
+    component:'Power',
+    desc:'检测到电源供给异常，包括电压超出范围、PSU 故障或 DCU 供电不足。',
+    causes:['PSU 容量不足（DCU 负载峰值功耗超额）','电源线松动','PSU 故障','服务器电源管理配置错误'],
+    strategy:'1. 检查 PSU 总功率是否满足所有 DCU 峰值功耗\n2. 检查 8-pin/16-pin 电源连接器\n3. 通过 BMC 查看 PSU 状态\n4. 在高负载下监控 12V 轨电压'},
+  { id:'HW006', pattern:/hsl.*link.*fail|hsl.*error|hyswitch.*fail|interconnect.*fail/i,
+    name:'HSL 互联链路故障', cat:'HWFAIL', severity:'FAIL',
+    component:'HSL / HySwitch',
+    desc:'HSL（HYGON 高速互联）链路或 HySwitch 芯片发生硬件故障，多 DCU 互联通信中断。',
+    causes:['HSL 线缆损坏或接触不良','HySwitch 芯片故障','固件版本不兼容','ESD 静电损伤'],
+    strategy:'1. 检查 HSL 线缆两端连接是否牢固\n2. 查看 SXID 日志（SXID 204/206/207）\n3. 升级 HySwitch 固件至最新版\n4. 更换 HSL 线缆测试\n5. 联系 HYGON 技术支持'},
+  { id:'HW007', pattern:/row.*remap|page.*retir|bad.*page|bad.*row/i,
+    name:'HBM 行重映射 / 页退役', cat:'WARNING', severity:'WARN',
+    component:'HBM Memory',
+    desc:'HBM 显存执行了行重映射或页退役操作，说明已有存储单元出现故障并被隔离。少量修复在正常容错范围内，频繁发生则预示更严重的硬件老化。',
+    causes:['HBM 颗粒局部损坏','工作温度过高加速老化','行地址解码错误'],
+    strategy:'1. 通过 hy-smi 查看当前已退役页数\n2. 运行 HyFieldDiag 评估 HBM 剩余健康度\n3. 若退役页数快速增长，计划提前更换\n4. 检查工作温度是否长期偏高'},
+  { id:'HW008', pattern:/diag.*pass|test.*pass|check.*pass|all.*pass|healthy/i,
+    name:'诊断测试通过', cat:'INFO', severity:'PASS',
+    component:'General',
+    desc:'硬件诊断项目通过，相关组件状态正常。',
+    causes:[],
+    strategy:'无需操作，记录存档即可。'},
+  { id:'HW009', pattern:/diag.*fail|test.*fail|check.*fail|self.*test.*fail/i,
+    name:'诊断测试失败', cat:'HWFAIL', severity:'FAIL',
+    component:'General',
+    desc:'HyFieldDiag 或其他硬件自检程序检测到组件故障，具体组件需结合日志上下文确认。',
+    causes:['具体故障组件需结合详细日志分析'],
+    strategy:'1. 查看 HyFieldDiag 详细报告确认故障模块\n2. 根据故障模块类型（HBM/PCIe/散热/电源）参考对应处置流程\n3. 收集完整诊断日志提交技术支持\n4. 准备 RMA 材料'},
+  { id:'HW010', pattern:/ecc.*correctable|hbm.*ce|single.*bit.*error|sbe/i,
+    name:'HBM 可纠正 ECC 错误', cat:'WARNING', severity:'WARN',
+    component:'HBM Memory',
+    desc:'HBM 显存检测到可纠正 ECC 单比特错误（CE/SBE），已自动纠正，当前不影响数据完整性，但需监控频率。',
+    causes:['HBM 颗粒轻微老化','宇宙射线（Soft Error）','工作温度偏高'],
+    strategy:'1. 监控错误频率，若快速增加需关注\n2. 检查工作温度是否偏高\n3. 运行 HyFieldDiag 基线测试\n4. ECC 错误率持续高位时提前规划更换'},
+  { id:'HW011', pattern:/hy-smi|smi.*query|gpu.*query/i,
+    name:'hy-smi 监控数据', cat:'INFO', severity:'PASS',
+    component:'Monitor',
+    desc:'hy-smi 采集的 DCU 状态监控数据，包含温度、功耗、显存使用、PCIe 状态等基础信息。',
+    causes:[],
+    strategy:'结合具体数值判断：\n• 温度 >90°C：关注散热\n• 功耗持续满载：确认 PSU 余量\n• 显存使用率 >95%：应用层优化或增加设备\n• PCIe 带宽利用率高：检查 PCIe 链路质量'},
+];
+
+// ═══════════════════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════════════════
+const STATE = {
+  xid: { entries:[], grouped:{}, rawLines:[], selected:null, solutions:{} },
+  drv: { entries:[], grouped:{}, rawLines:[], selected:null, solutions:{} },
+  hw:  { entries:[], grouped:{}, rawLines:[], selected:null, solutions:{} },
+};
+let activeMod = 'xid';
+
+// ═══════════════════════════════════════════════════════════════
+//  Tab switching
+// ═══════════════════════════════════════════════════════════════
+function switchMod(mod) {
+  activeMod = mod;
+  document.querySelectorAll('.mod-tab').forEach(t => t.classList.toggle('active', t.dataset.mod === mod));
+  document.querySelectorAll('.module-panel').forEach(p => p.classList.toggle('active', p.id === 'mod-'+mod));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  File import helpers
+// ═══════════════════════════════════════════════════════════════
+function fileSelect(evt, fnameId, taId, cb) {
+  const f = evt.target.files[0]; if (!f) return;
+  readFile(f, fnameId, taId, cb);
+}
+function dragOver(evt, zoneId) { evt.preventDefault(); evt.stopPropagation(); document.getElementById(zoneId).classList.add('drag-over'); }
+function dragLeave(zoneId) { document.getElementById(zoneId).classList.remove('drag-over'); }
+function drop(evt, zoneId, fileId, fnameId, taId, cb) {
+  evt.preventDefault(); evt.stopPropagation();
+  document.getElementById(zoneId).classList.remove('drag-over');
+  const f = evt.dataTransfer.files[0]; if (!f) return;
+  readFile(f, fnameId, taId, cb);
+}
+function readFile(file, fnameId, taId, cb) {
+  const fr = new FileReader();
+  const sz = (file.size/1024).toFixed(1);
+  fr.onload = e => {
+    document.getElementById(taId).value = e.target.result;
+    document.getElementById(fnameId).textContent = `${file.name} (${sz}KB)`;
+    document.getElementById(fnameId).style.color = '';
+    cb();
+  };
+  fr.onerror = () => { document.getElementById(fnameId).textContent = '读取失败'; document.getElementById(fnameId).style.color = 'var(--c-crit)'; };
+  fr.readAsText(file, 'utf-8');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Timestamp parser
+// ═══════════════════════════════════════════════════════════════
+function parseTS(line) {
+  const m = line.match(/\[([A-Za-z]+\s+[A-Za-z]+\s+\d+\s+\d+:\d+:\d+\s+\d+)\]/);
+  if (m) { try { const d = new Date(m[1]); return { ts:m[1], tsMs: isNaN(d)?0:d.getTime() }; } catch(e){} }
+  const m2 = line.match(/(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})/);
+  if (m2) { try { const d = new Date(m2[1]); return { ts:m2[1], tsMs: isNaN(d)?0:d.getTime() }; } catch(e){} }
+  return { ts:'', tsMs:0 };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  XID parser
+// ═══════════════════════════════════════════════════════════════
+function parseXID() {
+  const raw = document.getElementById('xid-ta').value;
+  if (!raw.trim()) return;
+  const st = STATE.xid;
+  st.entries=[]; st.grouped={}; st.rawLines=raw.split('\n');
+
+  const xidRe=/XID:(\d+)/i, sxidRe=/SXID:\s*(\d+)/i;
+  st.rawLines.forEach((line,idx) => {
+    const xm=line.match(xidRe), sm=line.match(sxidRe);
+    if (!xm && !sm) return;
+    const {ts,tsMs} = parseTS(line);
+    const e = {
+      lineIdx:idx, ts, tsMs, raw:line.trim(),
+      xid: xm?parseInt(xm[1]):null,
+      sxid: sm?parseInt(sm[1]):null,
+      bdf:(line.match(/[\da-f]{4}:[\da-f]{2}:[\da-f]{2}\.\d/i)||[''])[0],
+      serial:(line.match(/serial:([^\)]+)\)/)||['',''])[1],
+      pid:(line.match(/pid:(\d+)/)||['','-'])[1],
+      tgid:(line.match(/tgid:(\d+)/)||['','-'])[1],
+      info:(line.match(/info:(.+)$/)||['',''])[1],
+    };
+    st.entries.push(e);
+    const key = e.xid!==null?`X${e.xid}`:`S${e.sxid}`;
+    if (!st.grouped[key]) st.grouped[key]=[];
+    st.grouped[key].push(e);
+  });
+  st.entries.sort((a,b)=>a.tsMs-b.tsMs||a.lineIdx-b.lineIdx);
+  renderXIDStats(); renderXIDList(); renderRawLines('xid-lines','xid-linecnt',st.rawLines, new Set(st.entries.map(e=>e.lineIdx)), 'var(--xid-col)');
+  document.getElementById('tc-xid').textContent = Object.keys(st.grouped).length;
+}
+
+function xidCat(xid,sxid) {
+  if (sxid!==null) { const s=SXID_DB[sxid]; return s?s.cat:'UNKNOWN'; }
+  const x=XID_DB[xid]; return x?x.cat:'UNKNOWN';
+}
+const CAT_ORDER = {CRITICAL:0,FATAL:1,RAS_UE:2,INIT:3,NONFATAL:4,RAS_CE:5,UNKNOWN:6};
+const CAT_LABEL = {CRITICAL:'CRIT',FATAL:'FATAL',RAS_UE:'RAS-UE',RAS_CE:'RAS-CE',NONFATAL:'WARN',INIT:'INIT',UNKNOWN:'???'};
+
+function renderXIDStats() {
+  const st = STATE.xid;
+  let crit=0,warn=0,ok=0;
+  Object.keys(st.grouped).forEach(k=>{
+    const e=st.grouped[k][0], cat=xidCat(e.xid,e.sxid);
+    if(['CRITICAL','FATAL','RAS_UE'].includes(cat)) crit++;
+    else if(['NONFATAL','INIT'].includes(cat)) warn++;
+    else ok++;
+  });
+  const n=Object.keys(st.grouped).length;
+  document.getElementById('xs-total').textContent=n;
+  document.getElementById('xs-crit').textContent=crit;
+  document.getElementById('xs-warn').textContent=warn;
+  document.getElementById('xs-ok').textContent=ok;
+}
+
+function renderXIDList() {
+  const st=STATE.xid; const el=document.getElementById('xid-list');
+  const keys=Object.keys(st.grouped);
+  if(!keys.length){el.innerHTML='<div class="es"><div class="es-icon">🔎</div><p>未发现 XID/SXID</p></div>';return;}
+  keys.sort((a,b)=>{
+    const ea=st.grouped[a][0],eb=st.grouped[b][0];
+    const oa=CAT_ORDER[xidCat(ea.xid,ea.sxid)]??6,ob=CAT_ORDER[xidCat(eb.xid,eb.sxid)]??6;
+    return oa!==ob?oa-ob:ea.tsMs-eb.tsMs;
+  });
+  el.innerHTML=keys.map(k=>{
+    const entries=st.grouped[k],e=entries[0];
+    const cat=xidCat(e.xid,e.sxid);
+    const info=e.xid!==null?XID_DB[e.xid]:SXID_DB[e.sxid];
+    const name=info?info.name:(e.xid!==null?`XID ${e.xid}`:`SXID ${e.sxid}`);
+    const prefix=e.xid!==null?`XID ${e.xid}`:`SXID ${e.sxid}`;
+    return `<div class="ev-item${st.selected===k?' active':''}" style="--item-color:var(--xid-col)" onclick="selectXID('${k}')">
+      <div class="ev-badge badge-${cat}">${CAT_LABEL[cat]||cat}</div>
+      <div class="ev-meta">
+        <div class="ev-name"><span style="color:var(--muted);font-size:10px">${prefix}</span> · ${name}</div>
+        <div class="ev-time">${e.ts||'—'}</div>
+      </div>
+      <div class="ev-cnt">${entries.length}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectXID(key) {
+  const st=STATE.xid; st.selected=key;
+  renderXIDList();
+  const entries=st.grouped[key],first=entries[0];
+  const isX=first.xid!==null, id=isX?first.xid:first.sxid;
+  const info=isX?XID_DB[id]:SXID_DB[id];
+  const cat=info?info.cat:'UNKNOWN';
+  showDetail('xid-detail-pane','xid-detail-card', buildXIDCard(key,entries,first,isX,id,info,cat));
+}
+
+function buildXIDCard(key,entries,first,isX,id,info,cat) {
+  const causeAll=['HW Error','Driver Error','User APP Error','FB Corruption','Thermal Issue','HySwitch Error','HFM Error'];
+  const active=info?.causes||[];
+  const occHtml=entries.slice(0,8).map(e=>`<div class="occ-row"><span class="occ-time">${e.ts||'—'}</span><span class="occ-raw">${esc((e.info||e.raw).slice(0,120))}</span></div>`).join('');
+  const bgMap={CRITICAL:'background:#2a0f0a;color:var(--c-crit);border:1px solid #5a1a10',FATAL:'background:#1f0a0a;color:var(--c-fatal);border:1px solid #5a1010',RAS_UE:'background:#1a1200;color:var(--c-rasue);border:1px solid #4a3800',RAS_CE:'background:#0a1800;color:var(--c-rasce);border:1px solid #1a4020',NONFATAL:'background:#1a0a2a;color:var(--c-warn);border:1px solid #3a1a5a',INIT:'background:#0a1a2a;color:var(--c-init);border:1px solid #1a3a5a',UNKNOWN:'background:#151820;color:var(--muted);border:1px solid var(--border2)'};
+  const saved=STATE.xid.solutions[key]||'';
+  return `<div class="dc-header">
+    <div><div class="dc-id-num"><small>${isX?'XID':'SXID'}</small>${id}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${first.ts||'—'}</div></div>
+    <div class="dc-title-wrap">
+      <div class="dc-title">${info?.name||(isX?`未知 XID ${id}`:`未知 SXID ${id}`)}</div>
+      <div class="dc-meta">${info?.type||'—'} · 出现 ${entries.length} 次${first.serial?' · Serial: '+first.serial:''}${first.bdf?' · BDF: '+first.bdf:''}</div>
+    </div>
+    <div class="dc-badge-lg" style="${bgMap[cat]||bgMap.UNKNOWN}">${CAT_LABEL[cat]||cat}</div>
+  </div>
+  <div class="dc-sec-title">错误描述</div>
+  <div class="dc-desc">${info?.desc||'暂无描述，请参考 HYGON DCU XID/SXID 文档（Rev.2.2.0）。'}</div>
+  <div class="dc-sec-title">可能原因</div>
+  <div class="dc-causes">${causeAll.map(c=>`<span class="cause-tag${active.includes(c)?' active':''}">${c}</span>`).join('')}</div>
+  <div class="dc-sec-title">处置建议</div>
+  <div class="strategy-box">${info?.strategy||'请参考 HYGON 文档或联系技术支持。'}</div>
+  <div class="dc-sec-title">发生记录（最近 ${Math.min(entries.length,8)}/${entries.length} 条）</div>
+  <div class="occ-list">${occHtml}</div>
+  <div class="dc-sec-title">自定义处理方案 <span style="font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--info)">（可编辑，导出时一并输出）</span></div>
+  <textarea class="sol-ta" id="sol-xid-${key}" placeholder="填写实际操作步骤、处理人、时间等…" oninput="saveSol('xid','${key}')">${saved}</textarea>
+  <div class="sol-actions"><button class="btn btn-ok btn-sm" onclick="saveSol('xid','${key}',true)">✓ 保存</button><span class="saved-ind" id="sind-xid-${key}">已保存</span></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Driver parser
+// ═══════════════════════════════════════════════════════════════
+function parseDRV() {
+  const raw = document.getElementById('drv-ta').value;
+  if (!raw.trim()) return;
+  const st = STATE.drv;
+  st.entries=[]; st.grouped={}; st.rawLines=raw.split('\n');
+  const hlLines = new Set();
+
+  st.rawLines.forEach((line,idx) => {
+    let matched = null;
+    for (const rule of DRV_KB) {
+      if (rule.pattern.test(line)) { matched = rule; break; }
+    }
+    if (!matched) return;
+    const {ts,tsMs} = parseTS(line);
+    const e = { lineIdx:idx, ts, tsMs, raw:line.trim(), ruleId:matched.id, severity:matched.severity };
+    st.entries.push(e);
+    hlLines.add(idx);
+    const key = matched.id;
+    if (!st.grouped[key]) st.grouped[key]=[];
+    st.grouped[key].push(e);
+  });
+
+  st.entries.sort((a,b)=>a.tsMs-b.tsMs||a.lineIdx-b.lineIdx);
+  renderDRVStats(); renderDRVList(); renderRawLines('drv-lines','drv-linecnt',st.rawLines,hlLines,'var(--drv-col)');
+  document.getElementById('tc-drv').textContent = Object.keys(st.grouped).length;
+}
+
+const SEV_ORDER_DRV = {ERROR:0,WARNING:1,INFO:2};
+
+function renderDRVStats() {
+  const st=STATE.drv;
+  let err=0,warn=0,info=0;
+  st.entries.forEach(e=>{ if(e.severity==='ERROR')err++; else if(e.severity==='WARNING')warn++; else info++; });
+  document.getElementById('ds-total').textContent=Object.keys(st.grouped).length;
+  document.getElementById('ds-err').textContent=err;
+  document.getElementById('ds-warn').textContent=warn;
+  document.getElementById('ds-info').textContent=info;
+}
+
+function renderDRVList() {
+  const st=STATE.drv; const el=document.getElementById('drv-list');
+  const keys=Object.keys(st.grouped);
+  if(!keys.length){el.innerHTML='<div class="es"><div class="es-icon">🔎</div><p>未发现驱动问题</p></div>';return;}
+  keys.sort((a,b)=>{
+    const ra=DRV_KB.find(r=>r.id===a),rb=DRV_KB.find(r=>r.id===b);
+    const oa=SEV_ORDER_DRV[ra?.severity]??3,ob=SEV_ORDER_DRV[rb?.severity]??3;
+    return oa!==ob?oa-ob:st.grouped[a][0].tsMs-st.grouped[b][0].tsMs;
+  });
+  el.innerHTML=keys.map(k=>{
+    const rule=DRV_KB.find(r=>r.id===k);
+    const entries=st.grouped[k],e=entries[0];
+    const sev=rule?.severity||'INFO';
+    const badgeClass=sev==='ERROR'?'badge-ERROR':sev==='WARNING'?'badge-WARNING':'badge-INFO';
+    return `<div class="ev-item${st.selected===k?' active':''}" style="--item-color:var(--drv-col)" onclick="selectDRV('${k}')">
+      <div class="ev-badge ${badgeClass}">${sev}</div>
+      <div class="ev-meta">
+        <div class="ev-name"><span style="color:var(--muted);font-size:10px">${k}</span> · ${rule?.name||k}</div>
+        <div class="ev-time">${e.ts||'—'}</div>
+      </div>
+      <div class="ev-cnt">${entries.length}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectDRV(key) {
+  const st=STATE.drv; st.selected=key;
+  renderDRVList();
+  const entries=st.grouped[key];
+  const rule=DRV_KB.find(r=>r.id===key);
+  const first=entries[0];
+  showDetail('drv-detail-pane','drv-detail-card', buildDRVCard(key,entries,first,rule));
+}
+
+function buildDRVCard(key,entries,first,rule) {
+  const occHtml=entries.slice(0,8).map(e=>`<div class="occ-row"><span class="occ-time">${e.ts||'—'}</span><span class="occ-raw">${esc(e.raw.slice(0,130))}</span></div>`).join('');
+  const sevStyle={ERROR:'background:#1f0a0a;color:var(--c-fatal);border:1px solid #5a1010',WARNING:'background:#1a1200;color:var(--c-rasue);border:1px solid #4a3800',INFO:'background:#0a1a2a;color:var(--c-init);border:1px solid #1a3a5a'};
+  const sev=rule?.severity||'INFO';
+  const saved=STATE.drv.solutions[key]||'';
+  return `<div class="dc-header">
+    <div><div class="dc-id-num"><small style="font-size:11px">DRV</small>${key.replace('DRV','')}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${first.ts||'—'}</div></div>
+    <div class="dc-title-wrap">
+      <div class="dc-title">${rule?.name||key}</div>
+      <div class="dc-meta">驱动故障 · 出现 ${entries.length} 次</div>
+    </div>
+    <div class="dc-badge-lg" style="${sevStyle[sev]}">${sev}</div>
+  </div>
+  <div class="dc-sec-title">问题描述</div>
+  <div class="dc-desc">${rule?.desc||'请结合日志上下文分析。'}</div>
+  <div class="dc-sec-title">可能原因</div>
+  <div class="dc-causes">${(rule?.causes||[]).map(c=>`<span class="cause-tag active">${c}</span>`).join('')||'<span class="cause-tag">需进一步分析</span>'}</div>
+  <div class="dc-sec-title">处置建议</div>
+  <div class="strategy-box">${rule?.strategy||'请参考 HYGON 驱动文档或联系技术支持。'}</div>
+  <div class="dc-sec-title">匹配日志（最近 ${Math.min(entries.length,8)}/${entries.length} 条）</div>
+  <div class="occ-list">${occHtml}</div>
+  <div class="dc-sec-title">自定义处理方案 <span style="font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--info)">（可编辑，导出时一并输出）</span></div>
+  <textarea class="sol-ta" id="sol-drv-${key}" placeholder="填写实际操作步骤、处理人、时间等…" oninput="saveSol('drv','${key}')">${saved}</textarea>
+  <div class="sol-actions"><button class="btn btn-ok btn-sm" onclick="saveSol('drv','${key}',true)">✓ 保存</button><span class="saved-ind" id="sind-drv-${key}">已保存</span></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Hardware parser
+// ═══════════════════════════════════════════════════════════════
+function parseHW() {
+  const raw = document.getElementById('hw-ta').value;
+  if (!raw.trim()) return;
+  const st = STATE.hw;
+  st.entries=[]; st.grouped={}; st.rawLines=raw.split('\n');
+  const hlLines = new Set();
+
+  st.rawLines.forEach((line,idx) => {
+    let matched = null;
+    for (const rule of HW_KB) {
+      if (rule.pattern.test(line)) { matched = rule; break; }
+    }
+    if (!matched) return;
+    const {ts,tsMs} = parseTS(line);
+    const e = { lineIdx:idx, ts, tsMs, raw:line.trim(), ruleId:matched.id, severity:matched.severity };
+    st.entries.push(e);
+    hlLines.add(idx);
+    const key = matched.id;
+    if (!st.grouped[key]) st.grouped[key]=[];
+    st.grouped[key].push(e);
+  });
+
+  st.entries.sort((a,b)=>a.tsMs-b.tsMs||a.lineIdx-b.lineIdx);
+  renderHWStats(); renderHWList(); renderRawLines('hw-lines','hw-linecnt',st.rawLines,hlLines,'var(--hw-col)');
+  document.getElementById('tc-hw').textContent = Object.keys(st.grouped).length;
+}
+
+const SEV_ORDER_HW = {FAIL:0,WARN:1,PASS:2};
+
+function renderHWStats() {
+  const st=STATE.hw;
+  let fail=0,warn=0,pass=0;
+  st.entries.forEach(e=>{ if(e.severity==='FAIL')fail++; else if(e.severity==='WARN')warn++; else pass++; });
+  document.getElementById('hs-total').textContent=Object.keys(st.grouped).length;
+  document.getElementById('hs-fail').textContent=fail;
+  document.getElementById('hs-warn').textContent=warn;
+  document.getElementById('hs-pass').textContent=pass;
+}
+
+function renderHWList() {
+  const st=STATE.hw; const el=document.getElementById('hw-list');
+  const keys=Object.keys(st.grouped);
+  if(!keys.length){el.innerHTML='<div class="es"><div class="es-icon">🔎</div><p>未发现硬件问题</p></div>';return;}
+  keys.sort((a,b)=>{
+    const ra=HW_KB.find(r=>r.id===a),rb=HW_KB.find(r=>r.id===b);
+    const oa=SEV_ORDER_HW[ra?.severity]??3,ob=SEV_ORDER_HW[rb?.severity]??3;
+    return oa!==ob?oa-ob:st.grouped[a][0].tsMs-st.grouped[b][0].tsMs;
+  });
+  el.innerHTML=keys.map(k=>{
+    const rule=HW_KB.find(r=>r.id===k);
+    const entries=st.grouped[k],e=entries[0];
+    const sev=rule?.severity||'PASS';
+    const badgeClass=sev==='FAIL'?'badge-HWFAIL':sev==='WARN'?'badge-WARNING':'badge-INFO';
+    return `<div class="ev-item${st.selected===k?' active':''}" style="--item-color:var(--hw-col)" onclick="selectHW('${k}')">
+      <div class="ev-badge ${badgeClass}">${sev}</div>
+      <div class="ev-meta">
+        <div class="ev-name"><span style="color:var(--muted);font-size:10px">${rule?.component||k}</span> · ${rule?.name||k}</div>
+        <div class="ev-time">${e.ts||'—'}</div>
+      </div>
+      <div class="ev-cnt">${entries.length}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectHW(key) {
+  const st=STATE.hw; st.selected=key;
+  renderHWList();
+  const entries=st.grouped[key];
+  const rule=HW_KB.find(r=>r.id===key);
+  showDetail('hw-detail-pane','hw-detail-card', buildHWCard(key,entries,entries[0],rule));
+}
+
+function buildHWCard(key,entries,first,rule) {
+  const occHtml=entries.slice(0,8).map(e=>`<div class="occ-row"><span class="occ-time">${e.ts||'—'}</span><span class="occ-raw">${esc(e.raw.slice(0,130))}</span></div>`).join('');
+  const sevStyle={FAIL:'background:#0a1a18;color:var(--teal);border:1px solid #1a3a35',WARN:'background:#1a1200;color:var(--c-rasue);border:1px solid #4a3800',PASS:'background:#0a1800;color:var(--c-rasce);border:1px solid #1a4020'};
+  const sev=rule?.severity||'PASS';
+  const saved=STATE.hw.solutions[key]||'';
+  return `<div class="dc-header">
+    <div><div class="dc-id-num" style="font-size:20px;padding-top:4px">${rule?.component||'HW'}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${first.ts||'—'}</div></div>
+    <div class="dc-title-wrap">
+      <div class="dc-title">${rule?.name||key}</div>
+      <div class="dc-meta">硬件诊断 · ${key} · 出现 ${entries.length} 次</div>
+    </div>
+    <div class="dc-badge-lg" style="${sevStyle[sev]||sevStyle.PASS}">${sev}</div>
+  </div>
+  <div class="dc-sec-title">问题描述</div>
+  <div class="dc-desc">${rule?.desc||'请结合日志上下文分析。'}</div>
+  ${rule?.causes?.length?`<div class="dc-sec-title">可能原因</div><div class="dc-causes">${rule.causes.map(c=>`<span class="cause-tag active">${c}</span>`).join('')}</div>`:''}
+  <div class="dc-sec-title">处置建议</div>
+  <div class="strategy-box">${rule?.strategy||'请参考 HyFieldDiag 输出或联系 HYGON 技术支持。'}</div>
+  <div class="dc-sec-title">匹配日志（最近 ${Math.min(entries.length,8)}/${entries.length} 条）</div>
+  <div class="occ-list">${occHtml}</div>
+  <div class="dc-sec-title">自定义处理方案 <span style="font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--info)">（可编辑，导出时一并输出）</span></div>
+  <textarea class="sol-ta" id="sol-hw-${key}" placeholder="填写实际操作步骤、处理人、时间等…" oninput="saveSol('hw','${key}')">${saved}</textarea>
+  <div class="sol-actions"><button class="btn btn-ok btn-sm" onclick="saveSol('hw','${key}',true)">✓ 保存</button><span class="saved-ind" id="sind-hw-${key}">已保存</span></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Shared helpers
+// ═══════════════════════════════════════════════════════════════
+function showDetail(paneId, cardId, html) {
+  const pane=document.getElementById(paneId);
+  pane.querySelector('.detail-placeholder').style.display='none';
+  const card=document.getElementById(cardId);
+  card.innerHTML=html; card.classList.add('visible');
+}
+
+function renderRawLines(linesId, cntId, rawLines, hlSet, hlColor) {
+  const el=document.getElementById(linesId);
+  if(!rawLines.length){el.innerHTML='<div class="es"><div class="es-icon">📄</div><p>解析后显示原始日志</p></div>';return;}
+  el.innerHTML=rawLines.map((line,i)=>{
+    const h=hlSet.has(i);
+    return `<div class="ll${h?' hl':''}" style="${h?'--hl-color:'+hlColor:''}" data-raw="${esc(line)}">
+      <span class="ll-num">${i+1}</span>
+      <span class="ll-txt">${esc(line)}</span>
+    </div>`;
+  }).join('');
+  document.getElementById(cntId).textContent=`${rawLines.length} 行`;
+}
+
+function filterLog(linesId, filterId) {
+  const q=document.getElementById(filterId).value.toLowerCase();
+  document.querySelectorAll(`#${linesId} .ll`).forEach(el=>{
+    el.style.display=(!q||(el.getAttribute('data-raw')||'').toLowerCase().includes(q))?'':'none';
+  });
+}
+
+function saveSol(mod, key, showInd) {
+  const ta=document.getElementById(`sol-${mod}-${key}`);
+  if(ta) STATE[mod].solutions[key]=ta.value;
+  if(showInd){
+    const ind=document.getElementById(`sind-${mod}-${key}`);
+    if(ind){ind.classList.add('show');setTimeout(()=>ind.classList.remove('show'),2000);}
+  }
+}
+
+function clearMod(mod) {
+  const st=STATE[mod];
+  st.entries=[]; st.grouped={}; st.rawLines=[]; st.selected=null;
+  document.getElementById(`${mod}-ta`).value='';
+  const fi=document.getElementById(`${mod}-file`); if(fi) fi.value='';
+  document.getElementById(`${mod}-fname`).textContent='未选择';
+  document.getElementById(`${mod}-fname`).style.color='';
+  document.getElementById(`${mod}-list`).innerHTML=`<div class="es"><div class="es-icon">${mod==='xid'?'📋':mod==='drv'?'🔧':'🖥️'}</div><p>等待日志输入</p></div>`;
+  document.getElementById(`${mod}-lines`).innerHTML='<div class="es"><div class="es-icon">📄</div><p>解析后显示原始日志</p></div>';
+  const dp=document.getElementById(`${mod}-detail-pane`);
+  dp.querySelector('.detail-placeholder').style.display='';
+  const dc=document.getElementById(`${mod}-detail-card`); dc.classList.remove('visible'); dc.innerHTML='';
+  document.getElementById(`${mod}-linecnt`).textContent='0 行';
+  document.getElementById(`tc-${mod}`).textContent='0';
+  if(mod==='xid'){document.getElementById('xs-total').textContent='0';document.getElementById('xs-crit').textContent='0';document.getElementById('xs-warn').textContent='0';document.getElementById('xs-ok').textContent='0';}
+  if(mod==='drv'){document.getElementById('ds-total').textContent='0';document.getElementById('ds-err').textContent='0';document.getElementById('ds-warn').textContent='0';document.getElementById('ds-info').textContent='0';}
+  if(mod==='hw'){document.getElementById('hs-total').textContent='0';document.getElementById('hs-fail').textContent='0';document.getElementById('hs-warn').textContent='0';document.getElementById('hs-pass').textContent='0';}
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+// ═══════════════════════════════════════════════════════════════
+//  Demo data
+// ═══════════════════════════════════════════════════════════════
+function loadXIDDemo() {
+  document.getElementById('xid-ta').value=`[Thu Jan  2 10:01:05 2025] hycu 0000:49:00.0: hycu:(serial:DCU-A01)XID:1, pasid:0, pid:0, tgid:0, sub block: 0, info:UMC CE channel:2
+[Thu Jan  2 10:05:21 2025] hycu 0000:49:00.0: hycu:(serial:DCU-A01)XID:81, pasid:2768, pid:211096, tgid:211096, sub block: 0, info:src_id:0 ring:241 page_fault from kernel
+[Thu Jan  2 10:05:22 2025] hycu 0000:49:00.0: hycu:(serial:DCU-A01)XID:81, pasid:2769, pid:211097, tgid:211096, sub block: 0, info:src_id:0 ring:242 page_fault from user
+[Thu Jan  2 10:15:33 2025] hycu 0000:49:00.0: hycu:(serial:DCU-A01)XID:2, pasid:0, pid:0, tgid:0, sub block: 0, info:UMC UE channel:1 row:0x5678
+[Thu Jan  2 10:30:10 2025] hycu 0000:49:00.0: hycu:(serial:DCU-A01)XID:50, pasid:0, pid:0, tgid:0, sub block: 0, info:temperature:102C threshold:95C
+[Thu Jan  2 11:02:44 2025] hsw 0000:08:1f:00.0: SXID:203, block: 0, Block: FW info: fw_version[1.2.0.8109] not fit drv version[1.x.0.8110]
+[Thu Jan  2 11:10:08 2025] hycu 0000:49:00.0: hycu:(serial:DCU-A01)XID:76, pasid:0, pid:0, tgid:0, sub block: 0, info:QCM timeout ring:5
+[Thu Jan  2 11:10:09 2025] hycu 0000:49:00.0: hycu:(serial:DCU-A01)XID:51, pasid:0, pid:0, tgid:0, sub block: 0, info:DCU isolated hw_fault
+[Thu Jan  2 12:00:01 2025] hycu 0000:49:00.0: hycu:(serial:DCU-A01)XID:130, pasid:0, pid:0, tgid:0, sub block: 0, info:single-bit ECC rate:1234/hr
+[Thu Jan  2 13:25:17 2025] hycu 0000:49:00.0: hycu:(serial:DCU-A01)XID:120, pasid:0, pid:0, tgid:0, sub block: 0, info:HBM page retired page:0xdeadbeef
+[Thu Jan  2 14:00:00 2025] hycu 0000:49:00.0: hycu:(serial:DCU-A01)XID:87, pasid:0, pid:0, tgid:0, sub block: 0, info:firmware load failed version mismatch`;
+  parseXID();
+}
+
+function loadDRVDemo() {
+  document.getElementById('drv-ta').value=`[2025-01-02 09:45:12] [INFO]  hycu: initializing HYGON DCU driver v2.1.0
+[2025-01-02 09:45:13] [ERROR] hycu: failed to load firmware amdgpu/gc_11_0_0_pfp.bin (-2)
+[2025-01-02 09:45:13] [ERROR] hycu: failed to load firmware amdgpu/gc_11_0_0_me.bin (-2)
+[2025-01-02 09:48:22] [WARN]  hycu: ring gfx timeout, signaled seq=1234 but get 1200, emit_seq=1235
+[2025-01-02 09:48:23] [INFO]  hycu: GPU soft reset triggered
+[2025-01-02 09:48:24] [INFO]  hycu: amdgpu_gpu_reset: GPU reset succeeded
+[2025-01-02 09:52:11] [WARN]  hycu: version mismatch: driver 2.1.0, firmware expects 2.0.x
+[2025-01-02 10:01:05] [ERROR] hycu: ring sdma0 timeout, signaled seq=567 but get 520
+[2025-01-02 10:01:06] [INFO]  hycu: GPU hard reset triggered for sdma0
+[2025-01-02 10:05:30] [WARN]  hycu: thermal throttling active, clock reduced to 800MHz
+[2025-01-02 10:10:44] [ERROR] hycu: pcie aer uncorrectable error detected on 0000:49:00.0
+[2025-01-02 10:15:00] [ERROR] hycu: failed to allocate 4GB VRAM for process pid=3301
+[2025-01-02 10:20:33] [WARN]  hycu: device 0000:49:00.0 not responding, attempting recovery
+[2025-01-02 10:25:01] [INFO]  hycu: dkms module build completed for kernel 5.15.0-91`;
+  parseDRV();
+}
+
+function loadHWDemo() {
+  document.getElementById('hw-ta').value=`[2025-01-02 08:00:00] [HyFieldDiag v1.5.2] Starting diagnostic on DCU 0000:49:00.0 (serial: DCU-A01)
+[2025-01-02 08:00:05] [HyFieldDiag] PCIe Link Check: PASS (Gen4 x16, BW: 63.0 GB/s)
+[2025-01-02 08:00:10] [HyFieldDiag] FAIL: UMC ECC uncorrectable error detected on HBM channel 2, row 0x5678
+[2025-01-02 08:00:15] [HyFieldDiag] HBM row remapping: 3 rows remapped, 12 pages retired
+[2025-01-02 08:00:20] [HyFieldDiag] ECC correctable error count: 847 (threshold: 1000)
+[2025-01-02 08:00:25] [hy-smi] Temperature: 101°C  Threshold: 95°C  Status: CRITICAL
+[2025-01-02 08:00:26] [hy-smi] Fan Speed: 0 RPM  Status: FAN FAIL - fan not responding
+[2025-01-02 08:00:30] [HyFieldDiag] Power rail 12V: 11.1V (expected: 12.0V ±5%) - UNDERVOLT WARNING
+[2025-01-02 08:00:35] [HyFieldDiag] HSL Link 0: FAIL - link training failed after 3 retries
+[2025-01-02 08:00:40] [HyFieldDiag] Compute Unit Test: 64/72 CUs active (8 harvested)
+[2025-01-02 08:00:45] [HyFieldDiag] Memory bandwidth test: PASS (3.2 TB/s, expected > 3.0 TB/s)
+[2025-01-02 08:00:50] [HyFieldDiag] Overall Result: FAIL - critical issues detected, RMA recommended
+[2025-01-02 08:00:55] [hy-smi] PCIe link speed: Gen4 x8 (degraded, expected x16)`;
+  parseHW();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Export report
+// ═══════════════════════════════════════════════════════════════
+function buildReport() {
+  const now=new Date().toISOString();
+  let out=`# ══════════════════════════════════════════════════════════════
+# HYGON DCU_diag v2  综合诊断报告
+# 生成时间: ${now}
+# 知识库: Rev. 2.2.0
+# ══════════════════════════════════════════════════════════════\n\n`;
+
+  // XID section
+  const xs=STATE.xid; const xkeys=Object.keys(xs.grouped);
+  out+=`${'═'.repeat(64)}\n## 模块一：XID / SXID 错误分析\n${'═'.repeat(64)}\n`;
+  if(!xkeys.length){out+='  （无 XID/SXID 事件）\n\n';}
+  else {
+    out+=`  事件类型数: ${xkeys.length}  总条目数: ${xs.entries.length}\n\n`;
+    const sorted=[...xs.entries].sort((a,b)=>a.tsMs-b.tsMs||a.lineIdx-b.lineIdx);
+    out+=`${'时间'.padEnd(28)} ${'类型'.padEnd(6)} ${'ID'.padEnd(5)} ${'名称'.padEnd(35)} BDF\n${'─'.repeat(90)}\n`;
+    sorted.forEach(e=>{
+      const isX=e.xid!==null,id=isX?e.xid:e.sxid;
+      const info=isX?XID_DB[id]:SXID_DB[id];
+      out+=`${(e.ts||'').padEnd(28)} ${(isX?'XID':'SXID').padEnd(6)} ${String(id).padEnd(5)} ${(info?.name||'Unknown').slice(0,35).padEnd(35)} ${e.bdf}\n`;
+    });
+    out+='\n';
+    xkeys.forEach(k=>{
+      const entries=xs.grouped[k],e=entries[0],isX=e.xid!==null,id=isX?e.xid:e.sxid;
+      const info=isX?XID_DB[id]:SXID_DB[id];
+      const cat=xidCat(e.xid,e.sxid);
+      out+=`┌── ${isX?'XID':'SXID'} ${id} [${CAT_LABEL[cat]}] ${info?.name||'Unknown'} (×${entries.length})\n`;
+      out+=`│ 描述: ${info?.desc||'—'}\n│ 建议:\n`;
+      (info?.strategy||'请参考文档').split('\n').forEach(l=>out+=`│   ${l}\n`);
+      const sol=xs.solutions[k]; if(sol?.trim()) {out+=`│ ★ 自定义方案:\n`;sol.trim().split('\n').forEach(l=>out+=`│   ${l}\n`);}
+      out+=`└${'─'.repeat(70)}\n\n`;
+    });
+  }
+
+  // Driver section
+  const ds=STATE.drv; const dkeys=Object.keys(ds.grouped);
+  out+=`${'═'.repeat(64)}\n## 模块二：驱动日志分析\n${'═'.repeat(64)}\n`;
+  if(!dkeys.length){out+='  （无驱动问题事件）\n\n';}
+  else {
+    out+=`  问题类型数: ${dkeys.length}  总条目数: ${ds.entries.length}\n\n`;
+    dkeys.forEach(k=>{
+      const entries=ds.grouped[k],rule=DRV_KB.find(r=>r.id===k);
+      out+=`┌── ${k} [${rule?.severity||'?'}] ${rule?.name||k} (×${entries.length})\n`;
+      out+=`│ 描述: ${rule?.desc||'—'}\n│ 建议:\n`;
+      (rule?.strategy||'—').split('\n').forEach(l=>out+=`│   ${l}\n`);
+      entries.slice(0,4).forEach((e,i)=>out+=`│ 样本${i+1}: ${e.ts||'—'} ${e.raw.slice(0,100)}\n`);
+      const sol=ds.solutions[k]; if(sol?.trim()) {out+=`│ ★ 自定义方案:\n`;sol.trim().split('\n').forEach(l=>out+=`│   ${l}\n`);}
+      out+=`└${'─'.repeat(70)}\n\n`;
+    });
+  }
+
+  // Hardware section
+  const hs=STATE.hw; const hkeys=Object.keys(hs.grouped);
+  out+=`${'═'.repeat(64)}\n## 模块三：硬件日志分析\n${'═'.repeat(64)}\n`;
+  if(!hkeys.length){out+='  （无硬件问题事件）\n\n';}
+  else {
+    out+=`  问题类型数: ${hkeys.length}  总条目数: ${hs.entries.length}\n\n`;
+    hkeys.forEach(k=>{
+      const entries=hs.grouped[k],rule=HW_KB.find(r=>r.id===k);
+      out+=`┌── ${k} [${rule?.severity||'?'}] ${rule?.name||k} (组件: ${rule?.component||'—'}) (×${entries.length})\n`;
+      out+=`│ 描述: ${rule?.desc||'—'}\n│ 建议:\n`;
+      (rule?.strategy||'—').split('\n').forEach(l=>out+=`│   ${l}\n`);
+      entries.slice(0,4).forEach((e,i)=>out+=`│ 样本${i+1}: ${e.ts||'—'} ${e.raw.slice(0,100)}\n`);
+      const sol=hs.solutions[k]; if(sol?.trim()) {out+=`│ ★ 自定义方案:\n`;sol.trim().split('\n').forEach(l=>out+=`│   ${l}\n`);}
+      out+=`└${'─'.repeat(70)}\n\n`;
+    });
+  }
+  return out;
+}
+
+function openExport() {
+  document.getElementById('exportPre').textContent=buildReport();
+  document.getElementById('exportModal').classList.add('open');
+}
+function closeExport() { document.getElementById('exportModal').classList.remove('open'); }
+function downloadReport() {
+  const blob=new Blob([buildReport()],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='dcu_diag_report.log';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+document.getElementById('exportModal').addEventListener('click',function(e){if(e.target===this)closeExport();});
+</script>
+</body>
+</html>

@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DCU_diag — HYGON DCU 全栈诊断工具</title>
+    <style>
+        :root {
+            --primary-color: #0056b3;
+            --bg-color: #f4f6f9;
+            --panel-bg: #ffffff;
+            --border-color: #dee2e6;
+            --text-main: #333333;
+            --text-sub: #666666;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --success-color: #28a745;
+            --info-color: #17a2b8;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        header {
+            background-color: var(--panel-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+
+        .brand {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .brand .sub {
+            font-size: 14px;
+            color: var(--text-sub);
+            font-weight: normal;
+            border-left: 1px solid #ccc;
+            padding-left: 10px;
+            margin-left: 5px;
+        }
+
+        /* Navigation */
+        .nav-tabs {
+            display: flex;
+            background: var(--panel-bg);
+            padding: 0 30px;
+            border-bottom: 1px solid var(--border-color);
+            height: 50px;
+            align-items: center;
+        }
+
+        .tab-link {
+            padding: 0 25px;
+            height: 100%;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 15px;
+            color: var(--text-sub);
+            border-bottom: 3px solid transparent;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .tab-link:hover { color: var(--primary-color); background-color: #f8f9fa; }
+        .tab-link.active { color: var(--primary-color); border-bottom: 3px solid var(--primary-color); font-weight: 600; }
+
+        /* Main Content */
+        main {
+            flex: 1;
+            padding: 20px 30px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .module-content {
+            display: none;
+            height: 100%;
+            flex-direction: column;
+        }
+
+        .module-content.active { display: flex; }
+
+        /* Layout Split */
+        .workspace {
+            display: flex;
+            gap: 20px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .panel-left {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-width: 400px;
+        }
+
+        .panel-right {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-width: 400px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-header {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Input Area */
+        .upload-zone {
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            padding: 20px;
+            text-align: center;
+            color: var(--text-sub);
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--primary-color);
+            background-color: #f0f7ff;
+        }
+
+        .upload-zone input[type="file"] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-top: 10px;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            resize: vertical;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        /* Buttons */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-main);
+            transition: all 0.2s;
+        }
+
+        .btn:hover { background: #f8f9fa; }
+        .btn-primary { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+        .btn-primary:hover { background: #004494; }
+        .btn-danger { color: var(--danger-color); border-color: var(--danger-color); }
+        .btn-danger:hover { background: #fff5f5; }
+
+        /* Stats */
+        .stats-row {
+            display: flex;
+            gap: 15px;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 10px;
+        }
+
+        .stat-item { font-size: 13px; }
+        .stat-val { font-weight: bold; font-size: 16px; margin-right: 5px; }
+        .text-danger { color: var(--danger-color); }
+        .text-warning { color: var(--warning-color); }
+        .text-success { color: var(--success-color); }
+
+        /* List */
+        .result-list {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: #fff;
+        }
+
+        .list-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+
+        .list-item:hover { background-color: #f8f9fa; }
+        .list-item.selected { background-color: #e7f1ff; border-left: 3px solid var(--primary-color); }
+        
+        .badge {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            color: #fff;
+        }
+        .bg-critical { background: var(--danger-color); }
+        .bg-warning { background: var(--warning-color); color: #333; }
+        .bg-info { background: var(--info-color); }
+
+        /* Detail View */
+        .detail-box {
+            flex: 1;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .detail-header {
+            padding: 10px 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .detail-body {
+            padding: 15px;
+            overflow-y: auto;
+            flex: 1;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .kb-section {
+            border-top: 1px dashed var(--border-color);
+            padding: 15px;
+            background: #fffbf0;
+        }
+
+        .kb-title {
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+
+        .kb-content {
+            font-size: 12px;
+            color: #555;
+        }
+
+        .log-raw {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 10px;
+            font-size: 12px;
+            color: #999;
+            background: var(--panel-bg);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="brand">
+        HYGON <span class="sub">DCU_diag · 全栈诊断工具</span>
+    </div>
+    <div>
+        <button class="btn" onclick="alert('版本：2.0.1\n构建日期：2023-10-27')">关于</button>
+    </div>
+</header>
+
+<nav class="nav-tabs">
+    <button class="tab-link active" onclick="switchTab('xid')">XID / SXID 诊断</button>
+    <button class="tab-link" onclick="switchTab('driver')">驱动诊断</button>
+    <button class="tab-link" onclick="switchTab('hardware')">硬件诊断</button>
+</nav>
+
+<main>
+    <!-- ================= XID 模块 (原有功能) ================= -->
+    <div id="module-xid" class="module-content active">
+        <div class="workspace">
+            <!-- 左侧 -->
+            <div class="panel-left">
+                <div class="card">
+                    <div class="card-header">输入 dmesg 日志</div>
+                    <div class="upload-zone" id="xid-upload-zone">
+                        <input type="file" id="xid-file" accept=".log,.txt,.dmesg" onchange="handleFileSelect('xid', this)">
+                        <div>📂 点击选择 / 拖拽日志文件</div>
+                        <div class="hint">支持 .log .txt .dmesg 或任意文本文件</div>
+                    </div>
+                    <textarea id="xid-text" placeholder="或手动粘贴..."></textarea>
+                    <div class="hint" style="margin-bottom: 10px;">支持 dmesg -T 格式，自动提取 XID / SXID 关键字并按时间排序。</div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="analyzeXID()">▶ 解析日志</button>
+                        <button class="btn" onclick="loadExample('xid')">加载示例</button>
+                        <button class="btn btn-danger" onclick="clearInput('xid')">清空</button>
+                    </div>
+                </div>
+
+                <div class="card" style="flex: 1;">
+                    <div class="card-header">
+                        分析结果
+                        <div class="stats-row" style="margin:0; border:none; padding:0;">
+                            <div class="stat-item"><span class="stat-val" id="xid-count-total">0</span>总计</div>
+                            <div class="stat-item"><span class="stat-val text-danger" id="xid-count-critical">0</span>严重</div>
+                            <div class="stat-item"><span class="stat-val text-warning" id="xid-count-warning">0</span>警告</div>
+                            <div class="stat-item"><span class="stat-val text-success" id="xid-count-recoverable">0</span>可恢复</div>
+                        </div>
+                    </div>
+                    <div class="result-list" id="xid-result-list">
+                        <div style="padding: 20px; text-align: center; color: #999;">等待日志输入</div>
+                    </div>
+                    <div class="btn-group" style="margin-top: 10px;">
+                        <button class="btn" onclick="exportReport('xid')">📄 导出 xid.log</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧 -->
+            <div class="panel-right">
+                <div class="detail-box">
+                    <div class="detail-header">
+                        <span id="xid-detail-title">🔍 点击左侧 XID 条目查看详情</span>
+                        <button class="btn" style="padding: 2px 8px;" onclick="closeDetail('xid')">✕ 关闭</button>
+                    </div>
+                    <div class="detail-body" id="xid-detail-content">
+                        <div style="color: #999; text-align: center; margin-top: 50px;">暂无详情</div>
+                    </div>
+                    <div class="detail-body kb-section" id="xid-kb-area" style="display:none;">
+                        <div class="kb-title">📚 知识库推荐</div>
+                        <div class="kb-content" id="xid-kb-content"></div>
+                    </div>
+                </div>
+                <div class="detail-box" style="flex: 0 0 30%;">
+                    <div class="detail-header">
+                        原始日志 <span id="xid-raw-lines" style="font-weight:normal; font-size:12px; color:#666;">0 行</span>
+                    </div>
+                    <div class="detail-body" style="padding: 0;">
+                        <div class="log-raw" id="xid-raw-log">解析后显示原始日志</div>
+                    </div>
+                    <div style="padding: 10px; border-top: 1px solid #eee; text-align: right;">
+                        <button class="btn" onclick="alert('下载功能模拟')">⬇ 下载</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 驱动 模块 (新增) ================= -->
+    <div id="module-driver" class="module-content">
+        <div class="workspace">
+            <div class="panel-left">
+                <div class="card">
+                    <div class="card-header">输入驱动日志</div>
+                    <div class="upload-zone">
+                        <input type="file" id="driver-file" accept=".log,.txt" onchange="handleFileSelect('driver', this)">
+                        <div>📂 点击选择 / 拖拽日志文件</div>
+                        <div class="hint">支持 dmesg, hygon_drv.log, modprobe.log</div>
+                    </div>
+                    <textarea id="driver-text" placeholder="或手动粘贴驱动日志..."></textarea>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="analyzeDriver()">▶ 开始分析</button>
+                        <button class="btn" onclick="loadExample('driver')">加载示例</button>
+                        <button class="btn btn-danger" onclick="clearInput('driver')">清空</button>
+                    </div>
+                </div>
+                <div class="card" style="flex: 1;">
+                    <div class="card-header">诊断结果</div>
+                    <div class="result-list" id="driver-result-list">
+                        <div style="padding: 20px; text-align: center; color: #999;">等待分析</div>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-right">
+                <div class="detail-box">
+                    <div class="detail-header">
+                        <span id="driver-detail-title">🔍 驱动问题详情</span>
+                    </div>
+                    <div class="detail-body" id="driver-detail-content">暂无详情</div>
+                    <div class="detail-body kb-section" id="driver-kb-area" style="display:none;">
+                        <div class="kb-title">📚 驱动问题知识库</div>
+                        <div class="kb-content" id="driver-kb-content"></div>
+                    </div>
+                </div>
+                <div class="detail-box" style="flex: 1;">
+                    <div class="detail-header">📚 常见问题速查</div>
+                    <div class="detail-body" id="driver-kb-list">
+                        <ul style="padding-left: 20px; margin: 0;">
+                            <li>如何查询驱动版本？<code>modinfo hygon_drv</code></li>
+                            <li>如何卸载驱动？<code>rmmod hygon_drv</code></li>
+                            <li>内核版本不匹配怎么办？请重新编译驱动。</li>
+                            <li>PCIe 报错如何处理？检查插槽接触及 BIOS 设置。</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 硬件 模块 (新增) ================= -->
+    <div id="module-hardware" class="module-content">
+        <div class="workspace">
+            <div class="panel-left">
+                <div class="card">
+                    <div class="card-header">输入硬件日志</div>
+                    <div class="upload-zone">
+                        <input type="file" id="hw-file" accept=".log,.txt,.json" onchange="handleFileSelect('hw', this)">
+                        <div>📂 点击选择 / 拖拽日志文件</div>
+                        <div class="hint">支持 smartctl, lspci, sensor, ECC 日志</div>
+                    </div>
+                    <textarea id="hw-text" placeholder="或手动粘贴硬件状态信息..."></textarea>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="analyzeHardware()">▶ 健康诊断</button>
+                        <button class="btn" onclick="loadExample('hw')">加载示例</button>
+                        <button class="btn btn-danger" onclick="clearInput('hw')">清空</button>
+                    </div>
+                </div>
+                <div class="card" style="flex: 1;">
+                    <div class="card-header">
+                        健康度评分：<span id="hw-score" class="stat-val text-success">100</span>
+                    </div>
+                    <div class="result-list" id="hw-result-list">
+                        <div style="padding: 20px; text-align: center; color: #999;">等待诊断</div>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-right">
+                <div class="detail-box">
+                    <div class="detail-header">
+                        <span id="hw-detail-title">🔍 硬件异常详情</span>
+                    </div>
+                    <div class="detail-body" id="hw-detail-content">暂无详情</div>
+                    <div class="detail-body kb-section" id="hw-kb-area" style="display:none;">
+                        <div class="kb-title">📚 硬件问题知识库</div>
+                        <div class="kb-content" id="hw-kb-content"></div>
+                    </div>
+                </div>
+                <div class="detail-box" style="flex: 1;">
+                    <div class="detail-header">📚 硬件维护建议</div>
+                    <div class="detail-body" id="hw-kb-list">
+                        <ul style="padding-left: 20px; margin: 0;">
+                            <li>定期清理灰尘，确保风道畅通。</li>
+                            <li>检查 PCIe 插槽是否氧化。</li>
+                            <li>监控长期温度趋势，避免过热。</li>
+                            <li>关注 ECC 错误计数增长情况。</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<footer>
+    &copy; 2023 HYGON DCU Diagnostic Tool. All Rights Reserved. | 版本 2.0 (Full Stack)
+</footer>
+
+<script>
+    // ================= 知识库数据 =================
+    const knowledgeBase = {
+        xid: [
+            { keyword: "XID 31", solution: "显存错误。建议运行显存测试工具，若持续报错需更换硬件。", level: "critical" },
+            { keyword: "XID 48", solution: "链接训练错误。检查 PCIe 插槽接触，更新主板 BIOS。", level: "warning" },
+            { keyword: "XID 79", solution: "GPU 掉卡。检查供电是否稳定，散热是否正常。", level: "critical" },
+            { keyword: "XID 63", solution: "停止处理命令。通常由之前的错误引起，请检查前置错误日志。", level: "warning" }
+        ],
+        driver: [
+            { keyword: "Invalid module format", solution: "驱动内核版本不匹配。请执行 uname -r 检查内核，重新编译或安装对应版本驱动。", level: "critical" },
+            { keyword: "Permission denied", solution: "权限不足。请使用 sudo 运行相关命令。", level: "warning" },
+            { keyword: "Failed to load", solution: "驱动加载失败。检查 dmesg 中是否有依赖缺失报错。", level: "critical" },
+            { keyword: "Version mismatch", solution: "用户态库与内核态驱动版本不一致。请重新安装完整驱动包。", level: "warning" }
+        ],
+        hardware: [
+            { keyword: "ECC", solution: "检测到 ECC 错误。少量可纠正错误正常，不可纠正错误需更换硬件。", level: "warning" },
+            { keyword: "Temperature", solution: "温度异常。检查风扇转速及机房环境温度。", level: "warning" },
+            { keyword: "PCIe Link Down", solution: "PCIe 链路断开。尝试重新插拔卡或更换插槽。", level: "critical" },
+            { keyword: "Power", solution: "供电异常。检查电源线缆及 PSU 功率是否充足。", level: "critical" }
+        ]
+    };
+
+    // ================= 核心逻辑 =================
+
+    // 1. 标签页切换
+    function switchTab(tabId) {
+        document.querySelectorAll('.module-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-link').forEach(el => el.classList.remove('active'));
+        
+        document.getElementById(`module-${tabId}`).classList.add('active');
+        
+        // 激活按钮状态
+        const buttons = document.querySelectorAll('.tab-link');
+        if(tabId === 'xid') buttons[0].classList.add('active');
+        if(tabId === 'driver') buttons[1].classList.add('active');
+        if(tabId === 'hardware') buttons[2].classList.add('active');
+    }
+
+    // 2. 文件处理
+    function handleFileSelect(module, input) {
+        const file = input.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById(`${module}-text`).value = e.target.result;
+        };
+        reader.readAsText(file);
+    }
+
+    function clearInput(module) {
+        document.getElementById(`${module}-file`).value = '';
+        document.getElementById(`${module}-text`).value = '';
+        document.getElementById(`${module}-result-list`).innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">等待输入</div>';
+        document.getElementById(`${module}-detail-content`).innerHTML = '暂无详情';
+        document.getElementById(`${module}-kb-area`).style.display = 'none';
+        
+        if(module === 'xid') {
+            document.getElementById('xid-count-total').innerText = '0';
+            document.getElementById('xid-count-critical').innerText = '0';
+            document.getElementById('xid-count-warning').innerText = '0';
+            document.getElementById('xid-count-recoverable').innerText = '0';
+            document.getElementById('xid-raw-log').innerText = '解析后显示原始日志';
+            document.getElementById('xid-raw-lines').innerText = '0 行';
+        }
+        if(module === 'hw') {
+            document.getElementById('hw-score').innerText = '100';
+            document.getElementById('hw-score').className = 'stat-val text-success';
+        }
+    }
+
+    function loadExample(module) {
+        let text = "";
+        if (module === 'xid') {
+            text = "[Fri Mar 10 10:00:01 2023] NVRM: XID (PCI:0000:00:01): 31, Frame 0\n[Fri Mar 10 10:00:05 2023] NVRM: XID (PCI:0000:00:01): 48, Link training\n[Fri Mar 10 10:00:10 2023] NVRM: XID (PCI:0000:00:01): 63, Stop processing";
+        } else if (module === 'driver') {
+            text = "Mar 10 10:00:01 server kernel: hygon_drv: Invalid module format\nMar 10 10:00:02 server kernel: hygon_drv: Failed to load\nMar 10 10:00:03 server kernel: Permission denied";
+        } else if (module === 'hw') {
+            text = "SMART Health: PASSED\nTemperature: 85 C\nPCIe Link Status: 2.5 GT/s\nECC Uncorrectable: 1\nPower Rail 12V: Stable";
+        }
+        document.getElementById(`${module}-text`).value = text;
+    }
+
+    // 3. 分析逻辑 (模拟)
+    function analyzeXID() {
+        const content = document.getElementById('xid-text').value;
+        if (!content) return alert("请输入日志内容");
+
+        const lines = content.split('\n');
+        const results = [];
+        let stats = { total: 0, critical: 0, warning: 0, recoverable: 0 };
+
+        lines.forEach((line, index) => {
+            if (line.includes("XID") || line.includes("SXID")) {
+                stats.total++;
+                let level = "info";
+                let badgeClass = "bg-info";
+                let summary = line.trim();
+
+                // 简单匹配逻辑
+                if (line.includes("31") || line.includes("79")) {
+                    level = "critical"; badgeClass = "bg-critical"; stats.critical++;
+                } else if (line.includes("48") || line.includes("63")) {
+                    level = "warning"; badgeClass = "bg-warning"; stats.warning++;
+                } else {
+                    stats.recoverable++;
+                }
+
+                results.push({ id: index, level, badgeClass, summary, raw: line });
+            }
+        });
+
+        // 更新 UI
+        document.getElementById('xid-count-total').innerText = stats.total;
+        document.getElementById('xid-count-critical').innerText = stats.critical;
+        document.getElementById('xid-count-warning').innerText = stats.warning;
+        document.getElementById('xid-count-recoverable').innerText = stats.recoverable;
+        document.getElementById('xid-raw-log').innerText = content;
+        document.getElementById('xid-raw-lines').innerText = lines.length + " 行";
+
+        renderList('xid', results);
+    }
+
+    function analyzeDriver() {
+        const content = document.getElementById('driver-text').value;
+        if (!content) return alert("请输入日志内容");
+
+        const lines = content.split('\n');
+        const results = [];
+
+        lines.forEach((line, index) => {
+            let level = "info";
+            let badgeClass = "bg-info";
+            let match = null;
+
+            if (line.includes("Invalid") || line.includes("Failed")) {
+                level = "critical"; badgeClass = "bg-critical";
+                match = knowledgeBase.driver.find(k => line.includes(k.keyword));
+            } else if (line.includes("Permission") || line.includes("mismatch")) {
+                level = "warning"; badgeClass = "bg-warning";
+                match = knowledgeBase.driver.find(k => line.includes(k.keyword));
+            }
+
+            if (level !== "info") {
+                results.push({ id: index, level, badgeClass, summary: line.trim(), raw: line, kb: match });
+            }
+        });
+
+        renderList('driver', results);
+    }
+
+    function analyzeHardware() {
+        const content = document.getElementById('hw-text').value;
+        if (!content) return alert("请输入日志内容");
+
+        const lines = content.split('\n');
+        const results = [];
+        let score = 100;
+
+        lines.forEach((line, index) => {
+            let level = "info";
+            let badgeClass = "bg-info";
+            let match = null;
+
+            if (line.includes("Uncorrectable") || line.includes("Down") || line.includes("Power")) {
+                level = "critical"; badgeClass = "bg-critical";
+                score -= 30;
+                match = knowledgeBase.hardware.find(k => line.includes(k.keyword));
+            } else if (line.includes("ECC") || line.includes("Temperature")) {
+                level = "warning"; badgeClass = "bg-warning";
+                score -= 10;
+                match = knowledgeBase.hardware.find(k => line.includes(k.keyword));
+            }
+
+            if (level !== "info") {
+                results.push({ id: index, level, badgeClass, summary: line.trim(), raw: line, kb: match });
+            }
+        });
+
+        if (score < 0) score = 0;
+        const scoreEl = document.getElementById('hw-score');
+        scoreEl.innerText = score;
+        scoreEl.className = score < 60 ? 'stat-val text-danger' : (score < 90 ? 'stat-val text-warning' : 'stat-val text-success');
+
+        renderList('hw', results);
+    }
+
+    // 4. 渲染列表
+    function renderList(module, results) {
+        const listEl = document.getElementById(`${module}-result-list`);
+        listEl.innerHTML = '';
+
+        if (results.length === 0) {
+            listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">未发现明显错误</div>';
+            return;
+        }
+
+        results.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'list-item';
+            div.onclick = () => showDetail(module, item);
+            div.innerHTML = `
+                <span>${item.summary.substring(0, 60)}${item.summary.length>60?'...':''}</span>
+                <span class="badge ${item.badgeClass}">${item.level.toUpperCase()}</span>
+            `;
+            listEl.appendChild(div);
+        });
+    }
+
+    // 5. 显示详情
+    function showDetail(module, item) {
+        // 高亮选中项
+        document.querySelectorAll(`#${module}-result-list .list-item`).forEach(el => el.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+
+        // 填充内容
+        document.getElementById(`${module}-detail-title`).innerText = `🔍 ${item.level.toUpperCase()} 详情`;
+        document.getElementById(`${module}-detail-content`).innerText = item.raw;
+
+        // 知识库
+        const kbArea = document.getElementById(`${module}-kb-area`);
+        const kbContent = document.getElementById(`${module}-kb-content`);
+        
+        if (item.kb) {
+            kbArea.style.display = 'block';
+            kbContent.innerHTML = `<strong>${item.kb.keyword}</strong>: ${item.kb.solution}`;
+        } else {
+            // 尝试模糊匹配知识库
+            let found = knowledgeBase[module].find(k => item.raw.includes(k.keyword));
+            if (found) {
+                kbArea.style.display = 'block';
+                kbContent.innerHTML = `<strong>${found.keyword}</strong>: ${found.solution}`;
+            } else {
+                kbArea.style.display = 'none';
+            }
+        }
+
+        // XID 特有：更新原始日志窗口
+        if (module === 'xid') {
+            document.getElementById('xid-raw-log').innerText = item.raw;
+        }
+    }
+
+    function closeDetail(module) {
+        document.getElementById(`${module}-detail-content`).innerHTML = '暂无详情';
+        document.getElementById(`${module}-kb-area`).style.display = 'none';
+        document.querySelectorAll(`#${module}-result-list .list-item`).forEach(el => el.classList.remove('selected'));
+    }
+
+    function exportReport(module) {
+        alert(`正在导出 ${module} 报告... (功能模拟)`);
+    }
+</script>
+
+</body>
+</html>

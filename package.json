@@ -1,0 +1,20 @@
+{
+  "name": "dcu_diag",
+  "version": "2.0.0",
+  "description": "HYGON DCU Comprehensive Diagnostic Tool",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "dcu",
+    "diagnostic",
+    "hygon"
+  ],
+  "author": "HYGON",
+  "license": "MIT",
+  "dependencies": {
+    "sqlite3": "^6.0.1"
+  }
+}
