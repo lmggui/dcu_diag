@@ -33,6 +33,19 @@ db.serialize(() => {
     content TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS knowledge_base (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    module TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT,
+    details TEXT NOT NULL,
+    severity TEXT,
+    tags TEXT,
+    confidence REAL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
 });
 
 const mimeTypes = {
@@ -69,6 +82,8 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST') {
       if (url === '/api/logs') return handlePostLogs(req, res);
       if (url === '/api/reports') return handlePostReports(req, res);
+      if (url === '/api/knowledge') return handlePostKnowledge(req, res);
+      if (url === '/api/knowledge/import-analysis') return handleImportKnowledgeFromAnalysis(req, res);
     }
 
     if (req.method === 'GET') {
@@ -76,11 +91,13 @@ const server = http.createServer((req, res) => {
       if (url === '/api/logs') return handleGetLogs(req, res, query);
       if (url === '/api/reports') return handleGetReports(req, res, query);
       if (url === '/api/stats') return handleGetStats(req, res);
+      if (url === '/api/knowledge') return handleGetKnowledge(req, res, query);
     }
 
     if (req.method === 'DELETE') {
       if (url === '/api/logs') return handleDeleteLogs(req, res);
       if (url === '/api/reports') return handleDeleteReports(req, res);
+      if (url === '/api/knowledge') return handleDeleteKnowledge(req, res, query);
     }
 
     return sendJSON(res, 404, { error: 'Endpoint not found' });
@@ -278,6 +295,163 @@ function handleGetStats(req, res) {
       return;
     }
     sendJSON(res, 200, rows);
+  });
+}
+
+function handlePostKnowledge(req, res) {
+  parseJSONBody(req, res, (data) => {
+    const source = data.source === 'ANALYSIS' ? 'ANALYSIS' : 'MANUAL';
+    const module = ['XID', 'DRV', 'HW', 'GENERAL'].includes(data.module) ? data.module : 'GENERAL';
+    const title = (data.title || '').trim();
+    const details = (data.details || '').trim();
+
+    if (!title || !details) {
+      return sendJSON(res, 400, { error: 'title and details are required' });
+    }
+
+    const summary = typeof data.summary === 'string' ? data.summary : '';
+    const severity = typeof data.severity === 'string' ? data.severity : 'INFO';
+    const tags = Array.isArray(data.tags) ? JSON.stringify(data.tags) : '[]';
+    const confidence = Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : null;
+
+    const sql = `
+      INSERT INTO knowledge_base (source, module, title, summary, details, severity, tags, confidence)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    db.run(sql, [source, module, title, summary, details, severity, tags, confidence], function(err) {
+      if (err) {
+        console.error('Failed to insert knowledge:', err.message);
+        return sendJSON(res, 500, { error: 'Failed to save knowledge' });
+      }
+      sendJSON(res, 201, { message: 'Knowledge saved', id: this.lastID });
+    });
+  });
+}
+
+function handleImportKnowledgeFromAnalysis(req, res) {
+  parseJSONBody(req, res, (data) => {
+    const module = ['XID', 'DRV', 'HW'].includes(data.module) ? data.module : null;
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!module || !items.length) {
+      return sendJSON(res, 400, { error: 'module and non-empty items are required' });
+    }
+
+    const sql = `
+      INSERT INTO knowledge_base (source, module, title, summary, details, severity, tags, confidence)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    let inserted = 0;
+    let skipped = 0;
+    let errored = false;
+
+    const runNext = (idx) => {
+      if (idx >= items.length) {
+        return sendJSON(res, 201, { message: 'Import complete', inserted, skipped, total: items.length });
+      }
+      const item = items[idx] || {};
+      const title = String(item.title || item.key || '').trim();
+      const details = String(item.details || item.raw || '').trim();
+      if (!title || !details) {
+        skipped += 1;
+        return runNext(idx + 1);
+      }
+      const summary = typeof item.summary === 'string' ? item.summary : '';
+      const severity = typeof item.severity === 'string' ? item.severity : 'INFO';
+      const tags = Array.isArray(item.tags) ? JSON.stringify(item.tags) : '[]';
+      const confidence = Number.isFinite(Number(item.confidence)) ? Number(item.confidence) : null;
+      db.run(sql, ['ANALYSIS', module, title, summary, details, severity, tags, confidence], (err) => {
+        if (err && !errored) {
+          errored = true;
+          console.error('Import knowledge failed:', err.message);
+          return sendJSON(res, 500, { error: 'Failed to import knowledge' });
+        }
+        if (!err) inserted += 1;
+        runNext(idx + 1);
+      });
+    };
+
+    runNext(0);
+  });
+}
+
+function handleGetKnowledge(req, res, query) {
+  const conditions = [];
+  const params = [];
+
+  if (query.has('module')) {
+    conditions.push('module = ?');
+    params.push(query.get('module').toUpperCase());
+  }
+  if (query.has('source')) {
+    conditions.push('source = ?');
+    params.push(query.get('source').toUpperCase());
+  }
+
+  let sql = 'SELECT * FROM knowledge_base';
+  if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+
+  const sort = query.get('sort') === 'id' ? 'id' : 'created_at';
+  const order = query.get('order') === 'ASC' ? 'ASC' : 'DESC';
+  const limit = Math.max(1, parseInt(query.get('limit') || '20', 10));
+  const offset = Math.max(0, parseInt(query.get('offset') || '0', 10));
+
+  sql += ` ORDER BY ${sort} ${order} LIMIT ? OFFSET ?`;
+
+  db.all(sql, params.concat([limit, offset]), (err, rows) => {
+    if (err) {
+      console.error('Failed to query knowledge:', err.message);
+      return sendJSON(res, 500, { error: 'Failed to query knowledge' });
+    }
+    const countSQL = 'SELECT COUNT(*) AS total FROM knowledge_base' + (conditions.length ? ' WHERE ' + conditions.join(' AND ') : '');
+    db.get(countSQL, params, (countErr, countRow) => {
+      if (countErr) {
+        console.error('Failed to count knowledge:', countErr.message);
+        return sendJSON(res, 500, { error: 'Failed to count knowledge' });
+      }
+      const normalized = rows.map(row => ({
+        ...row,
+        tags: (() => {
+          try { return JSON.parse(row.tags || '[]'); } catch { return []; }
+        })()
+      }));
+      sendJSON(res, 200, { total: countRow.total || 0, limit, offset, items: normalized });
+    });
+  });
+}
+
+function handleDeleteKnowledge(req, res, query) {
+  if (query.has('id')) {
+    const id = parseInt(query.get('id'), 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return sendJSON(res, 400, { error: 'Invalid id' });
+    }
+    return db.run('DELETE FROM knowledge_base WHERE id = ?', [id], function(err) {
+      if (err) {
+        console.error('Failed to delete knowledge by id:', err.message);
+        return sendJSON(res, 500, { error: 'Failed to delete knowledge' });
+      }
+      sendJSON(res, 200, { message: 'Knowledge deleted', deleted: this.changes });
+    });
+  }
+  db.run('DELETE FROM knowledge_base', [], function(err) {
+    if (err) {
+      console.error('Failed to delete all knowledge:', err.message);
+      return sendJSON(res, 500, { error: 'Failed to delete knowledge' });
+    }
+    sendJSON(res, 200, { message: 'All knowledge deleted', deleted: this.changes });
+  });
+}
+
+function parseJSONBody(req, res, onSuccess) {
+  let body = '';
+  req.on('data', chunk => { body += chunk; });
+  req.on('end', () => {
+    try {
+      onSuccess(JSON.parse(body || '{}'));
+    } catch (e) {
+      sendJSON(res, 400, { error: 'Invalid JSON' });
+    }
   });
 }
 

@@ -69,6 +69,7 @@ HOST=127.0.0.1 node server.js
 ```bash
 curl http://localhost:3000/api/status
 curl "http://localhost:3000/api/logs?limit=10&offset=0&sort=timestamp&order=DESC"
+curl "http://localhost:3000/api/knowledge?limit=10&offset=0&sort=created_at&order=DESC"
 ```
 
 `/api/logs` 支持参数：
@@ -77,6 +78,70 @@ curl "http://localhost:3000/api/logs?limit=10&offset=0&sort=timestamp&order=DESC
 - `offset` (默认 0)
 - `sort` (timestamp/id/type/category/severity)
 - `order` (ASC/DESC)
+
+`/api/knowledge` 支持参数：
+
+- `module` (XID/DRV/HW/GENERAL)
+- `source` (ANALYSIS/MANUAL)
+- `limit` (默认 20)
+- `offset` (默认 0)
+- `sort` (created_at/id)
+- `order` (ASC/DESC)
+
+### 7. 知识库接口（新增）
+
+支持两种来源：
+
+1. **导入现有日志分析结果**（`source=ANALYSIS`）
+2. **人工手动输入经验知识**（`source=MANUAL`）
+
+#### 7.1 手动新增知识
+
+```bash
+curl -X POST http://localhost:3000/api/knowledge \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "MANUAL",
+    "module": "HW",
+    "title": "高温告警排查流程",
+    "summary": "优先排查风扇与机房温度",
+    "details": "先检查 hy-smi 温度与风扇，再检查风道和机房环境温度。",
+    "severity": "WARNING",
+    "tags": ["thermal","ops"],
+    "confidence": 0.9
+  }'
+```
+
+#### 7.2 从分析结果批量导入
+
+```bash
+curl -X POST http://localhost:3000/api/knowledge/import-analysis \
+  -H "Content-Type: application/json" \
+  -d '{
+    "module": "DRV",
+    "items": [
+      {
+        "key": "DRV002",
+        "title": "GPU 环形缓冲区超时",
+        "summary": "驱动命令执行超时",
+        "details": "观察到 ring gfx timeout，建议结合 XID 76/77 一并排查。",
+        "severity": "ERROR",
+        "tags": ["timeout","driver"],
+        "confidence": 0.85
+      }
+    ]
+  }'
+```
+
+#### 7.3 删除知识
+
+```bash
+# 删除单条
+curl -X DELETE "http://localhost:3000/api/knowledge?id=1"
+
+# 删除全部
+curl -X DELETE "http://localhost:3000/api/knowledge"
+```
 
 预期输出：
 
