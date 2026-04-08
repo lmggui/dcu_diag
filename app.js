@@ -962,4 +962,116 @@ function downloadReport() {
   const a=document.createElement('a'); a.href=url; a.download='dcu_diag_report.log';
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  Knowledge workbench
+// ═══════════════════════════════════════════════════════════════
+function uploadLogForPipeline() {
+  const logText = document.getElementById('kb-log-upload').value.trim();
+  const resultEl = document.getElementById('kb-upload-result');
+  if (!logText) {
+    resultEl.textContent = '请先输入日志内容';
+    return;
+  }
+  resultEl.textContent = '上传中...';
+  fetch('/api/log-upload', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ logText, source: 'WEB_UI' })
+  })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('上传失败')))
+    .then(data => {
+      resultEl.textContent = `上传成功\nlogId: ${data.logId}\n时间: ${data.timestamp || '—'}`;
+    })
+    .catch(err => {
+      resultEl.textContent = `上传失败：${err.message}`;
+    });
+}
+
+function runAutoAnalysis() {
+  const logText = document.getElementById('kb-log-analyze').value.trim();
+  const resultEl = document.getElementById('kb-analyze-result');
+  if (!logText) {
+    resultEl.textContent = '请先输入日志内容';
+    return;
+  }
+  resultEl.textContent = '分析中...';
+  fetch('/api/analyze-log', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ logText })
+  })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('分析失败')))
+    .then(data => {
+      const matched = data.mode === 'KB_MATCH' ? '命中知识库' : '转大模型分析';
+      resultEl.textContent = `${matched}\n分类: ${data.category || '通用模型'}\n方案: ${data.solution || '无'}\n置信度: ${data.confidence ?? '—'}`;
+    })
+    .catch(err => {
+      resultEl.textContent = `分析失败：${err.message}`;
+    });
+}
+
+function importIssueToKnowledgeBase() {
+  const title = document.getElementById('kb-title').value.trim();
+  const kbCategory = document.getElementById('kb-category').value;
+  const details = document.getElementById('kb-details').value.trim();
+  const resultEl = document.getElementById('kb-import-result');
+  if (!title || !details) {
+    resultEl.textContent = '标题和详情必填';
+    return;
+  }
+  resultEl.textContent = '导入中...';
+  fetch('/api/knowledge', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      source: 'MANUAL',
+      module: 'GENERAL',
+      kbCategory,
+      title,
+      summary: title,
+      details,
+      severity: 'INFO',
+      tags: [kbCategory, 'manual-input'],
+      confidence: 0.9
+    })
+  })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('导入失败')))
+    .then(data => {
+      resultEl.textContent = `导入成功，ID: ${data.id}`;
+      document.getElementById('kb-title').value = '';
+      document.getElementById('kb-details').value = '';
+    })
+    .catch(err => {
+      resultEl.textContent = `导入失败：${err.message}`;
+    });
+}
+
+function searchKnowledgeBase() {
+  const q = document.getElementById('kb-search-input').value.trim();
+  const resultEl = document.getElementById('kb-search-result');
+  resultEl.textContent = '搜索中...';
+  const params = new URLSearchParams({ limit: 20, sort: 'created_at', order: 'DESC' });
+  if (q) params.set('q', q);
+  fetch(`/api/knowledge?${params.toString()}`)
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('搜索失败')))
+    .then(data => {
+      const items = data.items || [];
+      if (!items.length) {
+        resultEl.textContent = '未找到匹配知识';
+        return;
+      }
+      resultEl.innerHTML = items.map(item => `
+        <div style="padding:6px 0;border-bottom:1px solid var(--border)">
+          <div style="font-weight:700;color:#fff">${esc(item.title)}</div>
+          <div style="font-size:11px;color:var(--muted)">分类：${esc(item.kb_category || '通用模型')} · 来源：${esc(item.source || '')}</div>
+          <div style="font-size:11px;color:#b8c0d0;margin-top:3px">${esc(item.details || '')}</div>
+        </div>
+      `).join('');
+    })
+    .catch(err => {
+      resultEl.textContent = `搜索失败：${err.message}`;
+    });
+}
+
 document.getElementById('exportModal').addEventListener('click',function(e){if(e.target===this)closeExport();});
