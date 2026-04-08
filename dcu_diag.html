@@ -32,6 +32,53 @@
   </div>
 </div>
 
+<!-- ══ KNOWLEDGE WORKBENCH ══ -->
+<section class="kb-workbench">
+  <div class="kb-head">
+    <h2>知识库工作台</h2>
+    <div class="kb-search">
+      <input id="kb-search-input" type="text" placeholder="搜索知识库（关键词/分类）">
+      <button class="btn btn-sm" onclick="searchKnowledgeBase()">搜索</button>
+    </div>
+  </div>
+  <div class="kb-grid">
+    <div class="kb-card">
+      <h3>① 日志上传接口</h3>
+      <textarea id="kb-log-upload" class="log-ta" placeholder="粘贴待分析日志..."></textarea>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="uploadLogForPipeline()">上传日志</button>
+      </div>
+      <div id="kb-upload-result" class="kb-result">等待上传</div>
+    </div>
+    <div class="kb-card">
+      <h3>② 日志自动分析接口</h3>
+      <textarea id="kb-log-analyze" class="log-ta" placeholder="粘贴日志后点击自动分析..."></textarea>
+      <div class="btn-row">
+        <button class="btn btn-drv" onclick="runAutoAnalysis()">自动分析</button>
+      </div>
+      <div id="kb-analyze-result" class="kb-result">等待分析</div>
+    </div>
+    <div class="kb-card">
+      <h3>③ 问题导入接口（知识库构建）</h3>
+      <input id="kb-title" class="log-filter" placeholder="问题标题">
+      <select id="kb-category" class="log-filter" style="margin-top:8px">
+        <option>硬件驱动</option>
+        <option>DTK</option>
+        <option>DAS</option>
+        <option>服务器</option>
+        <option>大模型</option>
+        <option>通用模型</option>
+      </select>
+      <textarea id="kb-details" class="log-ta" placeholder="输入问题与处理方案详情..."></textarea>
+      <div class="btn-row">
+        <button class="btn btn-hw" onclick="importIssueToKnowledgeBase()">导入知识库</button>
+      </div>
+      <div id="kb-import-result" class="kb-result">等待导入</div>
+    </div>
+  </div>
+  <div id="kb-search-result" class="kb-search-result"></div>
+</section>
+
 <!-- ══ MODULES WRAP ══ -->
 <div class="modules-wrap">
 

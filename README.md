@@ -95,6 +95,15 @@ curl "http://localhost:3000/api/knowledge?limit=10&offset=0&sort=created_at&orde
 1. **导入现有日志分析结果**（`source=ANALYSIS`）
 2. **人工手动输入经验知识**（`source=MANUAL`）
 
+新增知识分类（`kbCategory`）：
+
+- 硬件驱动
+- DTK
+- DAS
+- 服务器
+- 大模型
+- 通用模型
+
 #### 7.1 手动新增知识
 
 ```bash
@@ -103,6 +112,7 @@ curl -X POST http://localhost:3000/api/knowledge \
   -d '{
     "source": "MANUAL",
     "module": "HW",
+    "kbCategory": "硬件驱动",
     "title": "高温告警排查流程",
     "summary": "优先排查风扇与机房温度",
     "details": "先检查 hy-smi 温度与风扇，再检查风道和机房环境温度。",
@@ -119,6 +129,7 @@ curl -X POST http://localhost:3000/api/knowledge/import-analysis \
   -H "Content-Type: application/json" \
   -d '{
     "module": "DRV",
+    "kbCategory": "硬件驱动",
     "items": [
       {
         "key": "DRV002",
@@ -141,6 +152,20 @@ curl -X DELETE "http://localhost:3000/api/knowledge?id=1"
 
 # 删除全部
 curl -X DELETE "http://localhost:3000/api/knowledge"
+```
+
+#### 7.4 日志上传与自动分析（知识库优先，低匹配度走大模型）
+
+```bash
+# 上传日志
+curl -X POST http://localhost:3000/api/log-upload \
+  -H "Content-Type: application/json" \
+  -d '{"logText":"driver firmware timeout error on server","source":"WEB_UI"}'
+
+# 自动分析：优先知识库匹配；若匹配度低则返回 LLM_FALLBACK
+curl -X POST http://localhost:3000/api/analyze-log \
+  -H "Content-Type: application/json" \
+  -d '{"logText":"firmware timeout error"}'
 ```
 
 预期输出：

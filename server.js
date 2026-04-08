@@ -46,6 +46,8 @@ db.serialize(() => {
     confidence REAL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  db.run(`ALTER TABLE knowledge_base ADD COLUMN kb_category TEXT DEFAULT '通用模型'`, () => {});
 });
 
 const mimeTypes = {
@@ -84,6 +86,8 @@ const server = http.createServer((req, res) => {
       if (url === '/api/reports') return handlePostReports(req, res);
       if (url === '/api/knowledge') return handlePostKnowledge(req, res);
       if (url === '/api/knowledge/import-analysis') return handleImportKnowledgeFromAnalysis(req, res);
+      if (url === '/api/log-upload') return handleLogUpload(req, res);
+      if (url === '/api/analyze-log') return handleAnalyzeLog(req, res);
     }
 
     if (req.method === 'GET') {
@@ -302,6 +306,8 @@ function handlePostKnowledge(req, res) {
   parseJSONBody(req, res, (data) => {
     const source = data.source === 'ANALYSIS' ? 'ANALYSIS' : 'MANUAL';
     const module = ['XID', 'DRV', 'HW', 'GENERAL'].includes(data.module) ? data.module : 'GENERAL';
+    const kbCategoryOptions = ['硬件驱动', 'DTK', 'DAS', '服务器', '大模型', '通用模型'];
+    const kbCategory = kbCategoryOptions.includes(data.kbCategory) ? data.kbCategory : '通用模型';
     const title = (data.title || '').trim();
     const details = (data.details || '').trim();
 
@@ -315,10 +321,10 @@ function handlePostKnowledge(req, res) {
     const confidence = Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : null;
 
     const sql = `
-      INSERT INTO knowledge_base (source, module, title, summary, details, severity, tags, confidence)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO knowledge_base (source, module, kb_category, title, summary, details, severity, tags, confidence)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    db.run(sql, [source, module, title, summary, details, severity, tags, confidence], function(err) {
+    db.run(sql, [source, module, kbCategory, title, summary, details, severity, tags, confidence], function(err) {
       if (err) {
         console.error('Failed to insert knowledge:', err.message);
         return sendJSON(res, 500, { error: 'Failed to save knowledge' });
@@ -331,14 +337,16 @@ function handlePostKnowledge(req, res) {
 function handleImportKnowledgeFromAnalysis(req, res) {
   parseJSONBody(req, res, (data) => {
     const module = ['XID', 'DRV', 'HW'].includes(data.module) ? data.module : null;
+    const kbCategoryOptions = ['硬件驱动', 'DTK', 'DAS', '服务器', '大模型', '通用模型'];
+    const defaultCategory = kbCategoryOptions.includes(data.kbCategory) ? data.kbCategory : '通用模型';
     const items = Array.isArray(data.items) ? data.items : [];
     if (!module || !items.length) {
       return sendJSON(res, 400, { error: 'module and non-empty items are required' });
     }
 
     const sql = `
-      INSERT INTO knowledge_base (source, module, title, summary, details, severity, tags, confidence)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO knowledge_base (source, module, kb_category, title, summary, details, severity, tags, confidence)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     let inserted = 0;
@@ -360,7 +368,8 @@ function handleImportKnowledgeFromAnalysis(req, res) {
       const severity = typeof item.severity === 'string' ? item.severity : 'INFO';
       const tags = Array.isArray(item.tags) ? JSON.stringify(item.tags) : '[]';
       const confidence = Number.isFinite(Number(item.confidence)) ? Number(item.confidence) : null;
-      db.run(sql, ['ANALYSIS', module, title, summary, details, severity, tags, confidence], (err) => {
+      const kbCategory = kbCategoryOptions.includes(item.kbCategory) ? item.kbCategory : defaultCategory;
+      db.run(sql, ['ANALYSIS', module, kbCategory, title, summary, details, severity, tags, confidence], (err) => {
         if (err && !errored) {
           errored = true;
           console.error('Import knowledge failed:', err.message);
@@ -386,6 +395,15 @@ function handleGetKnowledge(req, res, query) {
   if (query.has('source')) {
     conditions.push('source = ?');
     params.push(query.get('source').toUpperCase());
+  }
+  if (query.has('kbCategory')) {
+    conditions.push('kb_category = ?');
+    params.push(query.get('kbCategory'));
+  }
+  if (query.has('q')) {
+    const q = `%${query.get('q')}%`;
+    conditions.push('(title LIKE ? OR summary LIKE ? OR details LIKE ? OR kb_category LIKE ?)');
+    params.push(q, q, q, q);
   }
 
   let sql = 'SELECT * FROM knowledge_base';
@@ -418,6 +436,92 @@ function handleGetKnowledge(req, res, query) {
       sendJSON(res, 200, { total: countRow.total || 0, limit, offset, items: normalized });
     });
   });
+}
+
+function handleLogUpload(req, res) {
+  parseJSONBody(req, res, (data) => {
+    const logText = String(data.logText || '').trim();
+    const source = String(data.source || 'WEB');
+    if (!logText) return sendJSON(res, 400, { error: 'logText is required' });
+    const payload = {
+      type: 'PIPELINE',
+      category: 'UPLOAD',
+      severity: 'INFO',
+      content: JSON.stringify({ source, logText })
+    };
+    db.run(
+      'INSERT INTO logs (type, category, severity, content, timestamp) VALUES (?, ?, ?, ?, ?)',
+      [payload.type, payload.category, payload.severity, payload.content, new Date().toISOString()],
+      function(err) {
+        if (err) return sendJSON(res, 500, { error: 'Failed to upload log' });
+        sendJSON(res, 201, { message: 'Log uploaded', logId: this.lastID, timestamp: new Date().toISOString() });
+      }
+    );
+  });
+}
+
+function handleAnalyzeLog(req, res) {
+  parseJSONBody(req, res, (data) => {
+    const logText = String(data.logText || '').trim();
+    if (!logText) return sendJSON(res, 400, { error: 'logText is required' });
+
+    db.all('SELECT * FROM knowledge_base ORDER BY created_at DESC LIMIT 200', [], (err, rows) => {
+      if (err) return sendJSON(res, 500, { error: 'Failed to query knowledge base' });
+      const best = pickBestKnowledgeMatch(logText, rows || []);
+      if (best && best.score >= 0.12) {
+        return sendJSON(res, 200, {
+          mode: 'KB_MATCH',
+          confidence: Number(best.score.toFixed(2)),
+          category: best.item.kb_category || '通用模型',
+          title: best.item.title,
+          solution: best.item.details,
+          knowledgeId: best.item.id
+        });
+      }
+      const llm = fallbackLLMAnalysis(logText);
+      sendJSON(res, 200, {
+        mode: 'LLM_FALLBACK',
+        confidence: llm.confidence,
+        category: llm.category,
+        solution: llm.solution
+      });
+    });
+  });
+}
+
+function pickBestKnowledgeMatch(logText, rows) {
+  const text = tokenize(logText);
+  let best = null;
+  rows.forEach((item) => {
+    const docText = [item.title, item.summary, item.details, item.kb_category].join(' ');
+    const docTokens = tokenize(docText);
+    const inter = new Set([...text].filter(t => docTokens.has(t)));
+    const denom = Math.max(1, docTokens.size);
+    const score = inter.size / denom;
+    if (!best || score > best.score) best = { item, score };
+  });
+  return best;
+}
+
+function tokenize(raw) {
+  return new Set(
+    String(raw || '')
+      .toLowerCase()
+      .replace(/[^\w\u4e00-\u9fa5]+/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+  );
+}
+
+function fallbackLLMAnalysis(logText) {
+  const txt = String(logText).toLowerCase();
+  if (txt.includes('timeout')) {
+    return { category: '大模型', confidence: 0.55, solution: '知识库未命中高置信方案，建议大模型继续分析 timeout 根因并给出处置路径。' };
+  }
+  if (txt.includes('firmware') || txt.includes('driver')) {
+    return { category: '硬件驱动', confidence: 0.53, solution: '知识库命中不足，建议调用大模型结合驱动版本与固件版本做兼容性分析。' };
+  }
+  return { category: '通用模型', confidence: 0.5, solution: '知识库匹配度较低，已切换到大模型分析，请补充更多上下文日志提升结论准确度。' };
 }
 
 function handleDeleteKnowledge(req, res, query) {
